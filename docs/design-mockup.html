@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Návrh – Nová rezervace (světlý a tmavý)</title>
+<style>
+body{margin:0;padding:24px;background:#ddd;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;gap:24px;flex-wrap:wrap;justify-content:center}
+.ph{width:375px;border-radius:32px;padding:20px 18px 18px;background:var(--bg);color:var(--text);box-sizing:border-box}
+.l{--bg:#F6EFE8;--card:#FFFFFF;--text:#3B2E2C;--muted:#8E7A73;--border:#E7DAD0;--primary:#B97D80;--on:#FFFFFF;--sel:#F5E3E2;--ban:#FBEDEB;--bant:#9A5F63}
+.d{--bg:#1E1918;--card:#2A2321;--text:#F3E9E4;--muted:#A8968F;--border:#3B322F;--primary:#D6A7A8;--on:#2A1F1E;--sel:#3D2C2D;--ban:#2F2524;--bant:#E3B9BA}
+.back{color:var(--primary);font-size:16px}
+h1{font-size:28px;font-weight:600;margin:8px 0 14px}
+.ban{background:var(--ban);color:var(--bant);border-radius:14px;padding:12px;text-align:center;font-weight:600;font-size:14px}
+.lb{font-size:16px;font-weight:600;margin:18px 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.ch{padding:10px 16px;border-radius:14px;border:1px solid var(--border);background:var(--card);font-size:15px}
+.ch.on{background:var(--primary);color:var(--on);border-color:var(--primary)}
+.times{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
+.times .ch{text-align:center;padding:10px 0}
+.rc{display:flex;gap:12px;padding:14px;border-radius:14px;border:1px solid var(--border);background:var(--card);margin-bottom:8px}
+.rc.on{background:var(--sel);border:1.5px solid var(--primary)}
+.dot{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--muted);box-sizing:border-box;flex:none;margin-top:1px}
+.rc.on .dot{border:6px solid var(--primary)}
+.rc b{display:block;font-weight:600;font-size:16px}
+.rc span{font-size:13px;color:var(--muted)}
+.bar{display:flex;gap:10px;margin-top:20px}
+.bt{flex:1;text-align:center;padding:14px;border-radius:14px;font-size:16px;font-weight:600}
+.o{border:1px solid var(--primary);color:var(--primary)}
+.f{background:var(--primary);color:var(--on)}
+</style>
+</head>
+<body>
+<template id="t">
+<div class="back">Zpět</div>
+<h1>Nová rezervace</h1>
+<div class="ban">Příští návštěva: pá 21. 11. v 10:00</div>
+<div class="lb">Kadeřnice</div>
+<div class="chips"><div class="ch on">Petra</div><div class="ch">Lucie</div><div class="ch">Kdokoliv</div></div>
+<div class="lb">Služba</div>
+<div class="rc on"><div class="dot"></div><div><b>Dámský střih</b><span>45 min · 550 Kč</span></div></div>
+<div class="rc"><div class="dot"></div><div><b>Barvení a střih</b><span>2 h 10 min · od 1 400 Kč</span></div></div>
+<div class="rc"><div class="dot"></div><div><b>Foukaná</b><span>30 min · 350 Kč</span></div></div>
+<div class="lb">Termín</div>
+<div class="chips"><div class="ch">Po 17</div><div class="ch">Út 18</div><div class="ch on">St 19</div><div class="ch">Čt 20</div><div class="ch">Pá 21</div></div>
+<div class="times"><div class="ch">9:00</div><div class="ch on">10:30</div><div class="ch">11:15</div><div class="ch">13:00</div><div class="ch">14:30</div><div class="ch">15:30</div></div>
+<div class="bar"><div class="bt o">Moje termíny</div><div class="bt f">Rezervovat</div></div>
+</template>
+<div class="ph l"></div>
+<div class="ph d"></div>
+<script>document.querySelectorAll('.ph').forEach(p=>p.appendChild(document.getElementById('t').content.cloneNode(true)))</script>
+</body>
+</html>

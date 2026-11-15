@@ -1,0 +1,477 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+/* ---------------------------------------------------------------------------
+   Barvy podle docs/DESIGN.md – světlý a tmavý režim přes prefers-color-scheme.
+   --------------------------------------------------------------------------- */
+:root {
+    color-scheme: light dark;
+
+    --bg: #f6efe8;
+    --card: #ffffff;
+    --text: #3b2e2c;
+    --muted: #8e7a73;
+    --border: #e7dad0;
+    --primary: #b97d80;
+    --on-primary: #ffffff;
+    --selected: #f5e3e2;
+    --banner: #fbedeb;
+    --banner-text: #9a5f63;
+    --danger: #b5524e;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #1e1918;
+        --card: #2a2321;
+        --text: #f3e9e4;
+        --muted: #a8968f;
+        --border: #3b322f;
+        --primary: #d6a7a8;
+        --on-primary: #2a1f1e;
+        --selected: #3d2c2d;
+        --banner: #2f2524;
+        --banner-text: #e3b9ba;
+        --danger: #e59591;
+    }
+}
+
+@theme inline {
+    --font-sans: -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+    --color-bg: var(--bg);
+    --color-card: var(--card);
+    --color-ink: var(--text);
+    --color-muted: var(--muted);
+    --color-line: var(--border);
+    --color-primary: var(--primary);
+    --color-on-primary: var(--on-primary);
+    --color-selected: var(--selected);
+    --color-banner: var(--banner);
+    --color-banner-text: var(--banner-text);
+    --color-danger: var(--danger);
+
+    --radius-card: 14px;
+}
+
+@layer base {
+    html {
+        -webkit-text-size-adjust: 100%;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-sans);
+        font-size: 15px;
+        line-height: 1.45;
+        min-height: 100dvh;
+    }
+
+    [x-cloak] {
+        display: none !important;
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+    }
+
+    /* iOS při menším písmu ve formuláři přibližuje stránku – proto 16px. */
+    input,
+    select,
+    textarea {
+        font-size: 16px;
+    }
+}
+
+@layer components {
+    /* Typografie: nadpis obrazovky 28/600, sekce 16/600, text 15, popisky 13 */
+    .screen-title {
+        font-size: 28px;
+        font-weight: 600;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+        margin: 8px 0 14px;
+    }
+
+    .section-title {
+        font-size: 16px;
+        font-weight: 600;
+        margin: 18px 0 8px;
+    }
+
+    .label {
+        font-size: 13px;
+        color: var(--muted);
+    }
+
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        color: var(--primary);
+        font-size: 16px;
+    }
+
+    /* Karta */
+    .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+    }
+
+    /* Chip: 40px vysoký, dotyková plocha roztažená na 44px */
+    .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .chip {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 40px;
+        padding: 0 16px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text);
+        font-size: 15px;
+        white-space: nowrap;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .chip::after {
+        content: '';
+        position: absolute;
+        inset: -2px 0;
+    }
+
+    .chip.is-on,
+    .chip[aria-pressed='true'],
+    .chip[aria-checked='true'] {
+        background: var(--primary);
+        color: var(--on-primary);
+        border-color: var(--primary);
+    }
+
+    .chip:disabled,
+    .chip.is-off {
+        color: var(--muted);
+        opacity: 0.55;
+        cursor: default;
+    }
+
+    /* Dny v rezervaci: vodorovný pás chipů */
+    .chips-scroll {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 2px 0;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .chips-scroll::-webkit-scrollbar {
+        display: none;
+    }
+
+    .chips-scroll .chip {
+        flex: none;
+    }
+
+    /* Časy: mřížka 4 sloupce, dlaždice 44px */
+    .times {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .times .chip {
+        height: 44px;
+        padding: 0;
+    }
+
+    .times .chip::after {
+        content: none;
+    }
+
+    /* Karta výběru s kolečkem */
+    .option-card {
+        display: flex;
+        gap: 12px;
+        width: 100%;
+        text-align: left;
+        padding: 14px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text);
+        cursor: pointer;
+    }
+
+    .option-card + .option-card {
+        margin-top: 8px;
+    }
+
+    .option-card .dot {
+        flex: none;
+        width: 20px;
+        height: 20px;
+        margin-top: 1px;
+        border-radius: 50%;
+        border: 1.5px solid var(--muted);
+        box-sizing: border-box;
+    }
+
+    .option-card b {
+        display: block;
+        font-weight: 600;
+        font-size: 16px;
+    }
+
+    .option-card span {
+        font-size: 13px;
+        color: var(--muted);
+    }
+
+    .option-card.is-on,
+    .option-card[aria-checked='true'] {
+        background: var(--selected);
+        border: 1.5px solid var(--primary);
+        padding: 13.5px;
+    }
+
+    .option-card.is-on .dot,
+    .option-card[aria-checked='true'] .dot {
+        border: 6px solid var(--primary);
+    }
+
+    /* Info pruh (příští návštěva) */
+    .banner {
+        background: var(--banner);
+        color: var(--banner-text);
+        border-radius: 14px;
+        padding: 12px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 14px;
+    }
+
+    .banner-danger {
+        background: color-mix(in srgb, var(--danger) 12%, var(--card));
+        color: var(--danger);
+    }
+
+    /* Tlačítka */
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 48px;
+        padding: 12px 16px;
+        border-radius: 14px;
+        font-size: 16px;
+        font-weight: 600;
+        text-align: center;
+        cursor: pointer;
+        border: 1px solid transparent;
+    }
+
+    .btn-primary {
+        background: var(--primary);
+        color: var(--on-primary);
+    }
+
+    .btn-outline {
+        border-color: var(--primary);
+        color: var(--primary);
+        background: transparent;
+    }
+
+    .btn-danger {
+        border-color: var(--danger);
+        color: var(--danger);
+        background: transparent;
+    }
+
+    .btn-quiet {
+        color: var(--muted);
+        border-color: var(--border);
+        background: var(--card);
+    }
+
+    .btn-sm {
+        min-height: 44px;
+        padding: 8px 14px;
+        font-size: 15px;
+    }
+
+    .btn-block {
+        display: flex;
+        width: 100%;
+    }
+
+    .btn:disabled,
+    .btn[aria-disabled='true'] {
+        opacity: 0.45;
+        cursor: default;
+    }
+
+    /* Spodní lišta: přilepená dole, dvě tlačítka 50/50 */
+    .bottom-bar {
+        position: sticky;
+        bottom: 0;
+        z-index: 20;
+        display: flex;
+        gap: 10px;
+        margin: 20px -18px 0;
+        padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+    }
+
+    .bottom-bar > * {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    /* Formulář */
+    .field {
+        display: block;
+        margin-bottom: 12px;
+    }
+
+    .field > span {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+        margin-bottom: 4px;
+    }
+
+    .input {
+        display: block;
+        width: 100%;
+        min-height: 48px;
+        padding: 10px 14px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text);
+    }
+
+    .input::placeholder {
+        color: var(--muted);
+        opacity: 0.7;
+    }
+
+    .input:focus {
+        outline: none;
+        border-color: var(--primary);
+    }
+
+    textarea.input {
+        min-height: 88px;
+        resize: vertical;
+    }
+
+    .field-error {
+        margin-top: 4px;
+        font-size: 13px;
+        color: var(--danger);
+    }
+
+    .check {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        min-height: 44px;
+        padding: 6px 0;
+        cursor: pointer;
+    }
+
+    .check input {
+        flex: none;
+        width: 22px;
+        height: 22px;
+        margin-top: 1px;
+        accent-color: var(--primary);
+    }
+
+    /* Řádek seznamu (termíny, zákaznice) */
+    .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 56px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text);
+    }
+
+    .row + .row {
+        margin-top: 8px;
+    }
+
+    .row-main {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .row-main b {
+        display: block;
+        font-weight: 600;
+        font-size: 16px;
+    }
+
+    .row-main span {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+    }
+
+    .tag {
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        padding: 0 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        background: var(--banner);
+        color: var(--banner-text);
+        white-space: nowrap;
+    }
+
+    .tag-muted {
+        background: var(--bg);
+        color: var(--muted);
+        border: 1px solid var(--border);
+    }
+
+    .tag-danger {
+        background: color-mix(in srgb, var(--danger) 12%, var(--card));
+        color: var(--danger);
+    }
+
+    .empty {
+        padding: 28px 16px;
+        text-align: center;
+        color: var(--muted);
+        border: 1px dashed var(--border);
+        border-radius: 14px;
+    }
+}
