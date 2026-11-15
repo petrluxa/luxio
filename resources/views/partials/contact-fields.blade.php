@@ -20,6 +20,9 @@
         @error('email') <div class="field-error">{{ $message }}</div> @enderror
     </label>
 
+    <input type="hidden" name="{{ \App\Services\Security\PublicFormGuard::FIELD }}" value="{{ $formStamp }}">
+    @error('form') <div class="banner banner-danger mb-3" role="alert">{{ $message }}</div> @enderror
+
     {{-- Past na roboty: lidé toto pole nevidí. --}}
     <div class="hidden" aria-hidden="true">
         <label>Web <input type="text" name="website" tabindex="-1" autocomplete="off"></label>

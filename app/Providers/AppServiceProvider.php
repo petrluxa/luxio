@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -29,6 +30,11 @@ class AppServiceProvider extends ServiceProvider
         Date::use(CarbonImmutable::class);
 
         Model::shouldBeStrict(! $this->app->isProduction());
+
+        // Ostrý provoz jen přes HTTPS (push upozornění i PWA ho vyžadují).
+        if ($this->app->isProduction()) {
+            URL::forceScheme('https');
+        }
 
         // SPEC 3.2: 20 požadavků za minutu na IP adresu pro osobní odkazy /k/*.
         RateLimiter::for('customer-link', fn (Request $request) => Limit::perMinute(20)->by('k:'.$request->ip()));

@@ -9,6 +9,7 @@ use App\Models\CustomerAccessToken;
 use App\Models\Salon;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\Availability\SlotFinder;
 use App\Services\Booking\BookingManager;
 
 beforeEach(function () {
@@ -419,7 +420,7 @@ describe('pracovní doba a volno', function () {
     test('výjimka otevře i ve státní svátek', function () {
         $this->actingAs($this->petra)->post('/admin/vyjimky', ['date' => '2026-11-17', 'from' => '09:00', 'to' => '12:00'])->assertSessionHas('status');
 
-        $slots = app(App\Services\Availability\SlotFinder::class)->forDay($this->salon, [$this->cut], at('00:00', '2026-11-17'), $this->petra);
+        $slots = app(SlotFinder::class)->forDay($this->salon, [$this->cut], at('00:00', '2026-11-17'), $this->petra);
 
         expect($slots)->not->toBeEmpty();
     });

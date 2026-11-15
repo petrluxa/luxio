@@ -14,6 +14,7 @@ use App\Services\Availability\SlotFinder;
 use App\Services\Booking\BookingManager;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -24,6 +25,14 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // Ukázkový účet má veřejně známé heslo – na ostrý server nepatří.
+        // Tam se salon zakládá příkazem `php artisan luxio:install`.
+        if (app()->isProduction()) {
+            $this->command?->error('Ukázková data jsou jen pro vývoj. Na ostrém serveru použijte: php artisan luxio:install');
+
+            return;
+        }
+
         // Ukázkové rezervace nemají nikomu posílat notifikace.
         Event::fakeFor(function () {
             $salon = Salon::create([
@@ -63,7 +72,7 @@ class DatabaseSeeder extends Seeder
         });
     }
 
-    /** @return \Illuminate\Support\Collection<int, Service> */
+    /** @return Collection<int, Service> */
     private function services(Salon $salon, User $staff)
     {
         $rows = [

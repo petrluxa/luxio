@@ -8,6 +8,7 @@ use App\Services\Customers\AccessLinks;
 use App\Support\CustomerCookie;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -29,6 +30,8 @@ class RecoverController extends Controller
         Customer::where('email', Str::lower(trim($data['email'])))
             ->where('is_blocked', false)
             ->get()
+            // Nejvýš 3 e-maily za hodinu na zákaznici – nikdo jí tak nezahltí schránku.
+            ->filter(fn (Customer $customer) => RateLimiter::attempt('obnova:'.$customer->id, 3, fn () => true, 3600))
             ->each(fn (Customer $customer) => $links->sendClaim($customer, 'recover'));
 
         // Stejná odpověď, ať už e-mail známe, nebo ne.

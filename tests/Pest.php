@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Customer;
+use App\Models\CustomerAccessToken;
 use App\Models\Salon;
 use App\Models\Service;
 use App\Models\User;
@@ -96,7 +97,7 @@ function times(Collection $slots): array
 /** Vydá zákaznici osobní token a vrátí jeho čitelnou podobu. */
 function tokenFor(Customer $customer, ?int $scopeStaffId = null): string
 {
-    return App\Models\CustomerAccessToken::issue($customer, $scopeStaffId);
+    return CustomerAccessToken::issue($customer, $scopeStaffId);
 }
 
 /** Adresa v zákaznické části: k('/terminy') → /k/{token}/terminy */

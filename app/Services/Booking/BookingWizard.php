@@ -125,8 +125,9 @@ final class BookingWizard
             'staff' => ['nullable', 'integer'],
             'date' => ['required', 'date_format:Y-m-d'],
             'time' => ['required', 'regex:/^([01]?\d|2[0-3]):[0-5]\d$/'],
-            'note' => ['nullable', 'string', 'max:500'],
+            'note' => ['nullable', 'string', 'max:500', 'not_regex:/https?:|www\.|<a\s|\[url/i'],
         ], [
+            'note.not_regex' => 'Do poznámky prosím nevkládejte odkazy.',
             'services.required' => 'Vyberte prosím službu.',
             'date.required' => 'Vyberte prosím den.',
             'time.required' => 'Vyberte prosím čas.',

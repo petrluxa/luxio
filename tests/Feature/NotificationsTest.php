@@ -3,7 +3,6 @@
 use App\Enums\BookingNotice;
 use App\Enums\BookingSource;
 use App\Enums\BookingStatus;
-use App\Models\Booking;
 use App\Models\NotificationLog;
 use App\Notifications\BookingNotification;
 use App\Services\Booking\BookingManager;

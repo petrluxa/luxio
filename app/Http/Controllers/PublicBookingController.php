@@ -10,12 +10,14 @@ use App\Models\Salon;
 use App\Services\Booking\BookingManager;
 use App\Services\Booking\BookingWizard;
 use App\Services\Customers\AccessLinks;
+use App\Services\Security\PublicFormGuard;
 use App\Support\CustomerCookie;
 use App\Support\Cz;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -28,6 +30,7 @@ class PublicBookingController extends Controller
         private readonly BookingWizard $wizard,
         private readonly BookingManager $manager,
         private readonly AccessLinks $links,
+        private readonly PublicFormGuard $guard,
     ) {}
 
     public function create(Request $request, Salon $salon): View|RedirectResponse
@@ -42,6 +45,7 @@ class PublicBookingController extends Controller
         return view('public.create', [
             'salon' => $salon,
             'appTitle' => $salon->name,
+            'formStamp' => $this->guard->stamp(),
             'wizard' => $this->wizard->options($salon) + [
                 'slotsUrl' => route('salon.slots', $salon),
                 'replaces' => null,
@@ -72,6 +76,8 @@ class PublicBookingController extends Controller
             return redirect()->route('salon.sent', $salon);
         }
 
+        $this->guard->check($request);
+
         $request->merge([
             'phone' => Cz::normalizePhone($request->input('phone')),
             'email' => Str::lower(trim((string) $request->input('email'))),
@@ -95,7 +101,10 @@ class PublicBookingController extends Controller
 
         try {
             if ($existing) {
-                return $this->bookForExisting($salon, $existing, $selection);
+                $response = $this->bookForExisting($salon, $existing, $selection);
+                $this->guard->hit($request);
+
+                return $response;
             }
 
             [$booking, $token] = DB::transaction(function () use ($salon, $contact, $selection) {
@@ -123,6 +132,7 @@ class PublicBookingController extends Controller
             return back()->withInput()->with('error', $e->getMessage());
         }
 
+        $this->guard->hit($request);
         $this->links->sendWelcome($booking->customer, $token);
 
         return redirect()
@@ -142,7 +152,10 @@ class PublicBookingController extends Controller
      */
     private function bookForExisting(Salon $salon, Customer $existing, $selection): RedirectResponse
     {
-        if (! $existing->is_blocked) {
+        $waiting = $existing->bookings()->upcoming()->where('status', BookingStatus::Pending)->count();
+
+        // Kdo zná cizí e-mail nebo telefon, nesmí zákaznici zahltit rezervacemi a e-maily.
+        if (! $existing->is_blocked && $waiting < 2) {
             $this->manager->create(
                 customer: $existing,
                 services: $selection->services,
@@ -152,7 +165,9 @@ class PublicBookingController extends Controller
                 customerNote: $selection->note,
             );
 
-            $this->links->sendClaim($existing, 'existing');
+            if (RateLimiter::attempt('odkaz-na-email:'.$existing->id, 1, fn () => true, 3600)) {
+                $this->links->sendClaim($existing, 'existing');
+            }
         }
 
         return redirect()->route('salon.sent', $salon);

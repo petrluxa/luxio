@@ -5,7 +5,9 @@ use App\Mail\AccessLinkMail;
 use App\Models\Booking;
 use App\Models\Customer;
 use App\Models\CustomerAccessToken;
+use App\Services\Security\PublicFormGuard;
 use App\Support\CustomerCookie;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 
@@ -26,6 +28,7 @@ function firstBooking($test, array $overrides = []): array
         'phone' => '603 123 456',
         'email' => 'Jana@Example.com',
         'consent' => '1',
+        PublicFormGuard::FIELD => Crypt::encryptString((string) now()->subSeconds(30)->getTimestamp()),
     ];
 }
 

@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\BookingStatus;
 use App\Models\Booking;
-use App\Models\User;
 use App\Services\Availability\HolidayCalendar;
 use App\Services\Availability\TimeRange;
 use App\Services\Availability\WorkingTime;
