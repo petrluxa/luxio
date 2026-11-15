@@ -8,17 +8,24 @@
  *   services: [{ id, name, meta, staffIds }],
  *   slotsUrl: adresa pro načtení termínů,
  *   replaces: id přesouvané rezervace | null,
+ *   fixed:    true = služby jsou dané (přesun termínu v administraci), vybírá se jen den a čas,
  *   selected: { staffId, serviceIds, date, time }   – předvýběr / návrat po chybě
  * }
  */
 export default (config) => ({
     staff: config.staff,
     services: config.services,
+    fixed: config.fixed === true,
 
     staffId: null,
     serviceIds: [],
     date: null,
     time: null,
+
+    // Den a čas, se kterým průvodce začal (ťuknutí do kalendáře, návrat po chybě).
+    // Platí, dokud si uživatel sám nevybere jiný den.
+    wantedDate: null,
+    wantedTime: null,
 
     days: [],
     prev: null,
@@ -40,10 +47,17 @@ export default (config) => ({
         this.serviceIds = (selected.serviceIds ?? []).filter((id) => this.visibleServices.some((s) => s.id === id));
         this.date = selected.date ?? null;
         this.time = selected.time ?? null;
+        this.wantedDate = this.date;
+        this.wantedTime = this.time;
 
-        if (this.serviceIds.length) {
+        if (this.hasSelection) {
             this.load(this.date, true);
         }
+    },
+
+    /** Je z čeho počítat termíny? */
+    get hasSelection() {
+        return this.fixed || this.serviceIds.length > 0;
     },
 
     get visibleServices() {
@@ -89,7 +103,7 @@ export default (config) => ({
     },
 
     get ready() {
-        return this.serviceIds.length > 0 && this.date !== null && this.time !== null && !this.submitting;
+        return this.hasSelection && this.date !== null && this.time !== null && !this.submitting;
     },
 
     pickStaff(id) {
@@ -112,6 +126,8 @@ export default (config) => ({
     pickDay(date) {
         this.date = date;
         this.time = null;
+        this.wantedDate = null;
+        this.wantedTime = null;
     },
 
     /** Změna kadeřnice nebo služeb: výběr termínu už neplatí, načíst znovu od dneška. */
@@ -119,8 +135,8 @@ export default (config) => ({
         this.date = null;
         this.time = null;
 
-        if (this.serviceIds.length) {
-            this.load(null);
+        if (this.hasSelection) {
+            this.load(this.wantedDate);
         } else {
             this.requestNo++;
             this.days = [];
@@ -128,6 +144,13 @@ export default (config) => ({
             this.loaded = false;
             this.loading = false;
         }
+    },
+
+    /** Posun okna dnů šipkou. */
+    shift(from) {
+        this.wantedDate = null;
+        this.wantedTime = null;
+        this.load(from);
     },
 
     async load(from = null, keepSelection = false) {
@@ -178,9 +201,14 @@ export default (config) => ({
 
             if (!stillValid) {
                 const keepDay = keepSelection && this.selectedDay && this.selectedDay.times.length > 0;
+                const wanted = this.days.find((d) => d.date === this.wantedDate && d.times.length > 0);
 
                 this.time = null;
-                this.date = keepDay ? this.date : (this.days.find((d) => d.times.length > 0)?.date ?? null);
+                this.date = keepDay ? this.date : (wanted ?? this.days.find((d) => d.times.length > 0))?.date ?? null;
+
+                if (wanted && this.date === wanted.date && wanted.times.includes(this.wantedTime)) {
+                    this.time = this.wantedTime;
+                }
             }
         } catch (error) {
             if (requestNo === this.requestNo) {

@@ -153,6 +153,9 @@ final class BookingManager
 
         $booking->update(['status' => BookingStatus::Confirmed]);
 
+        // Schválením první rezervace se zákaznice stává ověřenou – příště už nečeká.
+        $booking->customer()->update(['is_verified' => true]);
+
         BookingApproved::dispatch($booking);
     }
 

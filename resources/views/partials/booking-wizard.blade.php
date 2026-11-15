@@ -16,6 +16,8 @@
         <input type="hidden" name="replaces" value="{{ $replaces->id }}">
     @endif
 
+    @includeWhen($customerPicker ?? false, 'admin.partials.customer-picker')
+
     {{-- Kadeřnice --}}
     <template x-if="staff.length > 1">
         <section>
@@ -32,7 +34,7 @@
     </template>
 
     {{-- Služba --}}
-    <section>
+    <section x-show="!fixed">
         <h2 class="section-title" id="wizard-services">Služba</h2>
         <div role="group" aria-labelledby="wizard-services">
             <template x-for="service in visibleServices" :key="service.id">
@@ -48,19 +50,19 @@
     </section>
 
     {{-- Termín --}}
-    <section x-show="serviceIds.length > 0" x-cloak>
+    <section x-show="hasSelection" x-cloak>
         <div class="flex items-baseline justify-between gap-3">
             <h2 class="section-title" id="wizard-days">Termín</h2>
             <span class="label" x-text="monthLabel"></span>
         </div>
 
         <div class="chips" role="group" aria-labelledby="wizard-days">
-            <button type="button" class="chip" x-show="prev" x-on:click="load(prev)" aria-label="Dřívější dny">‹</button>
+            <button type="button" class="chip" x-show="prev" x-on:click="shift(prev)" aria-label="Dřívější dny">‹</button>
             <template x-for="day in days" :key="day.date">
                 <button type="button" class="chip" :class="{ 'is-off': day.times.length === 0 }" :disabled="day.times.length === 0"
                         :aria-pressed="date === day.date" :aria-label="day.label" x-on:click="pickDay(day.date)" x-text="day.chip"></button>
             </template>
-            <button type="button" class="chip" x-show="next" x-on:click="load(next)" aria-label="Další dny">›</button>
+            <button type="button" class="chip" x-show="next" x-on:click="shift(next)" aria-label="Další dny">›</button>
         </div>
 
         <p class="label mt-3" x-show="loading && !loaded" role="status">Hledám volné termíny…</p>
@@ -73,7 +75,7 @@
         <div class="empty mt-3" x-show="loaded && !failed && !hasAnySlot">
             V těchto dnech není žádný volný termín.
             <template x-if="next">
-                <button type="button" class="btn btn-outline btn-sm mt-3" x-on:click="load(next)">Zkusit další dny</button>
+                <button type="button" class="btn btn-outline btn-sm mt-3" x-on:click="shift(next)">Zkusit další dny</button>
             </template>
         </div>
 
@@ -91,14 +93,14 @@
         <h2 class="section-title">Shrnutí</h2>
         <div class="card">
             <b class="block text-[16px] font-semibold" x-text="whenLabel"></b>
-            <span class="mt-1 block" x-text="serviceNames"></span>
+            <span class="mt-1 block" x-show="serviceNames" x-text="serviceNames"></span>
             <span class="label mt-1 block">
                 <span x-show="staff.length > 1" x-text="staffName + ' · '"></span><span x-text="summary ? summary.duration + ' · ' + summary.price : ''"></span>
             </span>
         </div>
 
-        <label class="field mt-3">
-            <span>Poznámka pro kadeřnici (nepovinné)</span>
+        <label class="field mt-3" x-show="!fixed">
+            <span>{{ $noteLabel ?? 'Poznámka pro kadeřnici (nepovinné)' }}</span>
             <textarea class="input" name="note" maxlength="500" rows="2">{{ old('note') }}</textarea>
         </label>
     </section>

@@ -10,7 +10,8 @@
 
 @section('body')
     @php($tab = $tab ?? '')
-    <main class="mx-auto w-full max-w-2xl px-[18px] pb-[calc(84px+env(safe-area-inset-bottom))] pt-[max(20px,env(safe-area-inset-top))]">
+    <main class="mx-auto w-full max-w-2xl px-[18px] pb-[calc(84px+env(safe-area-inset-bottom))] pt-[max(20px,env(safe-area-inset-top))]"
+          style="--bar-offset: calc(57px + env(safe-area-inset-bottom)); --bar-safe: 0px">
         @include('partials.flash')
         @yield('content')
     </main>

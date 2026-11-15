@@ -57,6 +57,7 @@ final class BookingWizard
      * Nabídka dnů a časů pro okno 14 dní (odpověď pro průvodce).
      *
      * @param  array<int>  $serviceIds
+     * @param  ServicePlan|null  $fixedPlan  hotový plán při přesunu existující rezervace (délky ze snapshotu)
      */
     public function slots(
         Salon $salon,
@@ -65,8 +66,9 @@ final class BookingWizard
         ?string $from = null,
         bool $ignoreLimits = false,
         ?int $ignoreBookingId = null,
+        ?ServicePlan $fixedPlan = null,
     ): array {
-        $services = $this->services($salon, $serviceIds);
+        $services = $fixedPlan ? collect() : $this->services($salon, $serviceIds);
         $staff = $staffId ? $salon->staff()->with('services')->whereKey($staffId)->first() : null;
 
         $today = CarbonImmutable::today();
@@ -76,9 +78,9 @@ final class BookingWizard
         $start = $this->parseDate($from) ?? $today;
         $start = $start->max($firstDay)->min($lastDay);
 
-        $found = ($staffId && ! $staff) || $services->isEmpty()
+        $found = ($staffId && ! $staff) || (! $fixedPlan && $services->isEmpty())
             ? []
-            : $this->slots->forDays($salon, $services, $start, self::WINDOW_DAYS, $staff, $ignoreLimits, $ignoreBookingId);
+            : $this->slots->forDays($salon, $fixedPlan ?? $services, $start, self::WINDOW_DAYS, $staff, $ignoreLimits, $ignoreBookingId);
 
         $days = [];
 

@@ -332,12 +332,12 @@
     /* Spodní lišta: přilepená dole, dvě tlačítka 50/50 */
     .bottom-bar {
         position: sticky;
-        bottom: 0;
+        bottom: var(--bar-offset, 0px); /* v administraci nad spodní nabídkou */
         z-index: 20;
         display: flex;
         gap: 10px;
         margin: 20px -18px 0;
-        padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+        padding: 12px 18px calc(12px + var(--bar-safe, env(safe-area-inset-bottom)));
         background: var(--bg);
         border-top: 1px solid var(--border);
     }
@@ -473,5 +473,174 @@
         color: var(--muted);
         border: 1px dashed var(--border);
         border-radius: 14px;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Kalendář v administraci (den / týden)
+   --------------------------------------------------------------------------- */
+@layer components {
+    .cal {
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr);
+        padding-top: 8px;
+    }
+
+    .cal-week {
+        grid-template-columns: 36px repeat(7, minmax(0, 1fr));
+    }
+
+    .cal-head {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        margin-bottom: 10px;
+        font-size: 12px;
+        line-height: 1.2;
+        color: var(--muted);
+    }
+
+    .cal-head b {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text);
+    }
+
+    .cal-head.is-today b {
+        color: var(--primary);
+    }
+
+    .cal-hours {
+        position: relative;
+    }
+
+    .cal-hour {
+        position: absolute;
+        left: 0;
+        transform: translateY(-50%);
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    /* Sloupec dne: mimo pracovní dobu ztlumené pozadí, v pracovní době barva karty. */
+    .cal-col {
+        position: relative;
+        overflow: hidden;
+        border-left: 1px solid var(--border);
+        background: color-mix(in srgb, var(--border) 45%, var(--bg));
+    }
+
+    .cal-col:last-child {
+        border-right: 1px solid var(--border);
+    }
+
+    .cal-open {
+        position: absolute;
+        left: 0;
+        right: 0;
+        background: var(--card);
+    }
+
+    .cal-line {
+        position: absolute;
+        left: 0;
+        right: 0;
+        border-top: 1px solid var(--border);
+        pointer-events: none;
+    }
+
+    .cal-slot {
+        position: absolute;
+        left: 0;
+        right: 0;
+    }
+
+    .cal-slot:hover,
+    .cal-slot:active {
+        background: var(--selected);
+    }
+
+    .cal-block {
+        position: absolute;
+        left: 2px;
+        right: 2px;
+        z-index: 2;
+        overflow: hidden;
+        padding: 2px 6px;
+        border-radius: 8px;
+        border-left: 3px solid var(--primary);
+        background: var(--selected);
+        color: var(--text);
+        font-size: 12px;
+        line-height: 1.25;
+    }
+
+    .cal-block b {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .cal-block span {
+        display: block;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .cal-week .cal-block {
+        padding: 2px 3px;
+        border-left-width: 2px;
+        border-radius: 6px;
+        font-size: 11px;
+    }
+
+    .cal-block.is-pending {
+        background: var(--banner);
+        border-left-style: dashed;
+    }
+
+    .cal-block.is-no-show {
+        opacity: 0.55;
+        text-decoration: line-through;
+    }
+
+    .cal-pause {
+        position: absolute;
+        left: 2px;
+        right: 2px;
+        z-index: 1;
+        overflow: hidden;
+        padding: 2px 6px;
+        border-radius: 8px;
+        border: 1px dashed var(--primary);
+        color: var(--muted);
+        font-size: 12px;
+        pointer-events: none;
+    }
+
+    .cal-buffer {
+        position: absolute;
+        left: 2px;
+        right: 2px;
+        z-index: 1;
+        border-radius: 4px;
+        background: color-mix(in srgb, var(--muted) 22%, transparent);
+        pointer-events: none;
+    }
+
+    .cal-now {
+        position: absolute;
+        left: 0;
+        right: 0;
+        z-index: 3;
+        border-top: 2px solid var(--danger);
+        pointer-events: none;
     }
 }
