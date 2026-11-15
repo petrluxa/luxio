@@ -4,10 +4,13 @@ use App\Http\Controllers\Admin\LoginController;
 use App\Http\Controllers\Customer;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\PublicBookingController;
+use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\PwaController;
 use App\Http\Controllers\RecoverController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
+Route::get('/offline', [PwaController::class, 'offline'])->name('offline');
 
 /*
 |--------------------------------------------------------------------------
@@ -27,7 +30,13 @@ Route::prefix('s/{salon}')->name('salon.')->group(function () {
 |--------------------------------------------------------------------------
 */
 Route::prefix('k/{token}')->name('customer.')->middleware('customer.token')->group(function () {
-    Route::get('/rezervace/terminy', [Customer\BookingController::class, 'slots'])->middleware('throttle:slots')->name('booking.slots');
+    // Pomocné požadavky stránky (nepočítají se do limitu 20/min na otevírání obrazovek).
+    Route::middleware('throttle:slots')->group(function () {
+        Route::get('/rezervace/terminy', [Customer\BookingController::class, 'slots'])->name('booking.slots');
+        Route::get('/manifest.webmanifest', [PwaController::class, 'customerManifest'])->name('manifest');
+        Route::post('/push', [PushSubscriptionController::class, 'store'])->name('push.store');
+        Route::delete('/push', [PushSubscriptionController::class, 'destroy'])->name('push.destroy');
+    });
 
     Route::middleware('throttle:customer-link')->group(function () {
         Route::get('/', Customer\HomeController::class)->name('home');
@@ -62,6 +71,9 @@ Route::post('/obnovit/{customer}', [RecoverController::class, 'claim'])->middlew
 |--------------------------------------------------------------------------
 */
 Route::prefix('admin')->name('admin.')->group(function () {
+    // Manifest si prohlížeč stahuje bez přihlášení.
+    Route::get('/manifest.webmanifest', [PwaController::class, 'adminManifest'])->name('manifest');
+
     Route::middleware('guest')->group(function () {
         Route::get('/login', [LoginController::class, 'create'])->name('login');
         Route::post('/login', [LoginController::class, 'store'])->name('login.store');
@@ -69,6 +81,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
     Route::middleware('auth')->group(function () {
         Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
+        Route::post('/push', [PushSubscriptionController::class, 'store'])->name('push.store');
+        Route::delete('/push', [PushSubscriptionController::class, 'destroy'])->name('push.destroy');
 
         require __DIR__.'/admin.php';
     });

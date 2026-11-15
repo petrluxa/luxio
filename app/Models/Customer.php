@@ -7,14 +7,22 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Notifications\Notifiable;
+use NotificationChannels\WebPush\HasPushSubscriptions;
 
 class Customer extends Model
 {
-    use HasFactory, Notifiable;
+    use HasFactory, HasPushSubscriptions, Notifiable;
 
     protected $fillable = [
         'salon_id', 'name', 'phone', 'email', 'email_verified_at', 'preferred_staff_id',
         'note', 'color_recipe', 'is_blocked', 'is_verified', 'notifications_enabled', 'consent_at',
+    ];
+
+    /** Výchozí hodnoty i pro čerstvě vytvořený záznam (stejné jako v databázi). */
+    protected $attributes = [
+        'is_blocked' => false,
+        'is_verified' => false,
+        'notifications_enabled' => true,
     ];
 
     protected function casts(): array

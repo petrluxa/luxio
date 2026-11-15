@@ -93,6 +93,51 @@ final class Cz
         return $h.self::NBSP.'h'.($m > 0 ? ' '.$m.self::NBSP.'min' : '');
     }
 
+    /**
+     * 2. pád křestního jména pro spojení „u Petry“. Jen jednoslovná jména končící
+     * na -a (Petra → Petry, Dáša → Dáši, Maria → Marie); ostatní se nemění (Lucie, Ester).
+     */
+    public static function genitive(string $name): string
+    {
+        $name = trim($name);
+
+        if ($name === '' || str_contains($name, ' ') || mb_substr($name, -1) !== 'a') {
+            return $name;
+        }
+
+        $stem = mb_substr($name, 0, -1);
+        $last = mb_strtolower(mb_substr($stem, -1));
+
+        if ($last === 'i') {
+            return $stem.'e';                                   // Maria → Marie
+        }
+
+        $softened = ['ň' => 'n', 'ď' => 'd', 'ť' => 't'];
+
+        if (isset($softened[$last])) {
+            return mb_substr($stem, 0, -1).$softened[$last].'i';  // Táňa → Táni
+        }
+
+        return $stem.(in_array($last, ['ž', 'š', 'č', 'ř', 'c', 'j'], true) ? 'i' : 'y');
+    }
+
+    /**
+     * Odhad, jestli jde o ženské jméno (kvůli tvaru „zrušila“ / „zrušil“ v upozornění):
+     * příjmení na -á (Nováková, Malá), jinak křestní jméno na -a / -e.
+     */
+    public static function isFemaleName(string $fullName): bool
+    {
+        $parts = preg_split('/\s+/u', trim($fullName)) ?: [];
+        $last = mb_strtolower((string) end($parts));
+        $first = mb_strtolower((string) reset($parts));
+
+        if (count($parts) > 1 && mb_substr($last, -1) === 'á') {
+            return true;
+        }
+
+        return in_array(mb_substr($first, -1), ['a', 'e'], true);
+    }
+
     /** +420 603 123 456 */
     public static function phone(?string $phone): string
     {

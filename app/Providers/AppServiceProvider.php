@@ -3,12 +3,15 @@
 namespace App\Providers;
 
 use App\Enums\BookingStatus;
+use App\Listeners\LogNotifications;
+use App\Listeners\SendBookingNotifications;
 use App\Models\Booking;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -32,6 +35,10 @@ class AppServiceProvider extends ServiceProvider
 
         // Načítání volných termínů v průvodci (každá změna výběru = jeden dotaz).
         RateLimiter::for('slots', fn (Request $request) => Limit::perMinute(90)->by('slots:'.$request->ip()));
+
+        // Upozornění k rezervacím (push, e-mailová záloha) a jejich záznam.
+        Event::subscribe(SendBookingNotifications::class);
+        Event::subscribe(LogNotifications::class);
 
         // Počet rezervací ke schválení ve spodní nabídce administrace.
         View::composer('layouts.admin', function ($view) {

@@ -24,7 +24,7 @@
 
     <p class="mb-3 text-muted">Příště se objednáte na pár ťuknutí a připomínka termínu vám přijde rovnou na telefon. Bez hesla, bez SMS.</p>
 
-    @include('partials.install-steps')
+    @include('partials.install-steps', ['pushConfig' => ['vapidKey' => $vapidPublicKey, 'subscribeUrl' => route('customer.push.store')]])
 
     <div class="mt-6">
         <a class="btn {{ $booking ? 'btn-primary' : 'btn-outline' }} btn-block" href="{{ route('customer.home') }}">{{ $booking ? 'Pokračovat' : 'Zpět domů' }}</a>

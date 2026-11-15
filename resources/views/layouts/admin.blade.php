@@ -1,11 +1,7 @@
 @extends('layouts.base')
 
 @push('head')
-    @if (Route::has('admin.manifest'))<link rel="manifest" href="{{ route('admin.manifest') }}">@endif
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="{{ config('app.name') }}">
-    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <link rel="manifest" href="{{ route('admin.manifest') }}">
 @endpush
 
 @section('body')
