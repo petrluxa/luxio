@@ -509,6 +509,28 @@ describe('pracovní doba a volno', function () {
             ->and($hours->where('weekday', 6))->toHaveCount(1);
     });
 
+    test('den označený „Zavřeno“ se uloží bez pracovní doby, i když v polích zůstaly časy', function () {
+        $this->actingAs($this->petra)->post('/admin/pracovni-doba', [
+            'closed' => [3 => '1', 6 => '1', 7 => '1'],
+            'hours' => [
+                1 => [['from' => '09:00', 'to' => '17:00']],
+                3 => [['from' => '09:00', 'to' => '12:00'], ['from' => '13:00', 'to' => '17:00']],   // zavřeno má přednost
+                6 => [['from' => '', 'to' => '']],
+            ],
+        ])->assertSessionHas('status');
+
+        expect($this->petra->workingHours()->pluck('weekday')->unique()->values()->all())->toBe([1]);
+
+        // Stránka pak ukazuje zavřené dny zaškrtnuté a otevřený s časy.
+        $this->get('/admin/pracovni-doba')->assertOk()
+            ->assertSee('Zavřeno')
+            ->assertSee('name="closed[3]"', false)
+            ->assertSee('Přidat polední pauzu');
+
+        // Středeční termíny se zákaznicím přestanou nabízet.
+        expect(app(SlotFinder::class)->forDay($this->salon, [$this->cut], at('00:00'), $this->petra, true))->toBeEmpty();
+    });
+
     test('konec před začátkem neprojde a rozvrh zůstane', function () {
         $this->actingAs($this->petra)->post('/admin/pracovni-doba', ['hours' => [1 => [['from' => '12:00', 'to' => '08:00']]]])
             ->assertSessionHasErrors('hours.1');

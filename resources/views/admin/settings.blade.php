@@ -16,6 +16,18 @@
             <input class="input" type="text" name="name" value="{{ old('name', $salon->name) }}" maxlength="100" required>
             @error('name') <div class="field-error">{{ $message }}</div> @enderror
         </label>
+        <div class="grid grid-cols-2 gap-3">
+            <label class="field">
+                <span>Nápis na ceduli v rozvrhu</span>
+                <input class="input" type="text" name="sign_title" value="{{ old('sign_title', $salon->sign_title) }}" maxlength="40" placeholder="{{ $salon->name }}">
+                @error('sign_title') <div class="field-error">{{ $message }}</div> @enderror
+            </label>
+            <label class="field">
+                <span>Podtitul cedule</span>
+                <input class="input" type="text" name="sign_subtitle" value="{{ old('sign_subtitle', $salon->sign_subtitle) }}" maxlength="60" placeholder="např. Beauty Salon">
+                @error('sign_subtitle') <div class="field-error">{{ $message }}</div> @enderror
+            </label>
+        </div>
         <label class="field">
             <span>Telefon (zákaznice ho uvidí u zrušení po lhůtě)</span>
             <input class="input" type="tel" name="phone" value="{{ old('phone', Cz::phone($salon->phone)) }}" inputmode="tel">

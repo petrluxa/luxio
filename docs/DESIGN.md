@@ -21,7 +21,10 @@ s kolečkem, dvě tlačítka dole). Barvy: béžová, neonová žlutá a hnědá
 | `--banner-text` | `#FFF1D6` | `#F8DEAE` | text info pruhu – zlatavá z nápisu |
 | `--danger` | `#B8342D` | `#FF8E85` | zrušení |
 
-Tmavý režim přes `@media (prefers-color-scheme: dark)`; v Tailwindu barvy namapovat na tyto proměnné.
+Tmavá verze se řídí nastavením zařízení (`prefers-color-scheme`), dokud si ji uživatel nepřepne ručně:
+pak má `<html>` atribut `data-theme="light|dark"`, který má přednost. Tmavé hodnoty proměnných jsou proto
+v CSS dvakrát (v media dotazu a pod `[data-theme='dark']`) – měnit obě místa. V Tailwindu jsou barvy
+namapované na tyto proměnné.
 
 **Neonová žlutá se nikdy nepoužívá jako barva textu ani tenkého obrysu na světlém pozadí** –
 není tam čitelná. Je to výplň (tlačítko, vybraný chip, odznak s počtem) s tmavým textem
@@ -39,6 +42,11 @@ Stejné odstíny mají i místa mimo CSS: `theme-color` v `layouts/base.blade.ph
   Rezervace: potvrzená = výplň `--primary` s textem `--on-primary` (neonová je tu výplň, ne text),
   čeká na schválení = `--banner`, proběhlá nebo zaplacená = ztlumená (`--muted` do `--card`),
   levý okraj v barvě kadeřnice. Pauza (působí barva) čárkovaný obrys, úklid tenký šedý pruh.
+- **Cedule salonu** v panelu rozvrhu: stěna `--sign-wall` s teplou září shora a ze stran, nápis
+  `--sign-letter` s vrstveným stínem (prostorová písmena), podtitul proloženými verzálkami. V tmavé verzi
+  („zhasnuto“) záře zmizí a nápis ztmavne. Velikost písma se počítá z délky nápisu a šířky cedule.
+- Rozvrh mimo pracovní dobu má `--cal-closed` (ve světlé verzi tmavší béžová, v tmavé téměř černá),
+  aby byla pracovní doba v obou verzích zřetelná.
 - **Boxíky v Adminu**: karta se zaoblením 16px, ikona ve čtverci `--banner`, počet v kolečku `--primary`.
 - Šířka obsahu: formuláře 672px, přehledy 1024px, rozvrh přes celé okno (do 1720px).
 

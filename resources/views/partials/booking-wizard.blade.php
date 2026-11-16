@@ -24,11 +24,11 @@
     {{-- Kadeřnice --}}
     <template x-if="staff.length > 1">
         <section>
-            <h2 class="section-title" id="wizard-staff">Kadeřnice</h2>
+            <h2 class="section-title" id="wizard-staff">{{ $wizard['staffHeading'] ?? 'Kadeřnice' }}</h2>
             <div class="chips" role="radiogroup" aria-labelledby="wizard-staff">
                 <template x-for="member in staff" :key="member.id">
                     <button type="button" class="chip" role="radio" :aria-checked="staffId === member.id"
-                            x-on:click="pickStaff(member.id)" x-text="member.name"></button>
+                            x-on:click="pickStaff(member.id)" x-text="member.label ?? member.name"></button>
                 </template>
                 <button type="button" class="chip" role="radio" :aria-checked="staffId === null"
                         x-on:click="pickStaff(null)">Kdokoliv</button>

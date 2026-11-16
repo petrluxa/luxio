@@ -13,15 +13,16 @@ use Illuminate\Notifications\Notifiable;
 use NotificationChannels\WebPush\HasPushSubscriptions;
 
 /**
- * Správce salonu nebo kadeřnice. Přihlašuje se jménem (`login`) a heslem;
- * kadeřnice bez přihlašovacích údajů je jen v rozvrhu a sama se nepřihlásí.
+ * Správce salonu nebo člen týmu se sloupcem v rozvrhu (kadeřnice, manikúra, pedikúra, kosmetika…).
+ * Přihlašuje se jménem (`login`) a heslem; kdo přihlašovací údaje nemá, je jen v rozvrhu
+ * a sám se nepřihlásí. `position` je zaměření – podle něj se rozvrh dělí na skupiny.
  */
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasPushSubscriptions, Notifiable;
 
-    protected $fillable = ['salon_id', 'name', 'login', 'password', 'role', 'color', 'is_bookable'];
+    protected $fillable = ['salon_id', 'name', 'position', 'login', 'password', 'role', 'color', 'is_bookable', 'sort'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -34,9 +35,27 @@ class User extends Authenticatable
         ];
     }
 
+    protected static function booted(): void
+    {
+        // Nový člen týmu se v rozvrhu zařadí na konec; pořadí pak správce změní ručně.
+        static::creating(function (User $user) {
+            if (! $user->sort) {
+                $user->sort = (int) static::where('salon_id', $user->salon_id)->max('sort') + 1;
+            }
+        });
+    }
+
     public function isOwner(): bool
     {
         return $this->role === UserRole::Owner;
+    }
+
+    /** Klíč skupiny v rozvrhu podle zaměření („Manikúra“ a „manikúra“ jsou tatáž skupina). */
+    public function positionKey(): ?string
+    {
+        $position = trim((string) $this->position);
+
+        return $position === '' ? null : mb_strtolower($position);
     }
 
     /** Má vlastní přihlášení do administrace? */

@@ -23,10 +23,19 @@
     --banner: #74624f;
     --banner-text: #fff1d6;
     --danger: #b8342d;
+
+    /* cedule salonu v záhlaví rozvrhu: stěna, podsvícený nápis, podtitul */
+    --sign-wall: #a99a8a;
+    --sign-letter: #fdf8ef;
+    --sign-sub: #3a322c;
+    --sign-glow: 1;
+    --cal-closed: #e6dccd; /* rozvrh mimo pracovní dobu */
+    --sign-shadow: 0 1px 0 #e6dccd, 0 2px 0 #cfc2b0, 0 3px 0 #b7a895, 0 5px 4px rgb(58 40 22 / 0.35), 0 14px 22px rgb(58 40 22 / 0.32);
 }
 
+/* Tmavá verze: podle nastavení zařízení, nebo ručně vypínačem (data-theme na <html>). */
 @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme='light']) {
         --bg: #1c1713;
         --card: #28211b;
         --text: #f3ebdf;
@@ -39,7 +48,44 @@
         --banner: #3a2f25;
         --banner-text: #f8deae;
         --danger: #ff8e85;
+
+        /* zhasnuto: stěna ztmavne, nápis nesvítí */
+        --sign-wall: #6b6057;
+        --sign-letter: #9a8d7f;
+        --sign-sub: #e6dccf;
+        --sign-glow: 0;
+        --cal-closed: #120f0c;
+        --sign-shadow: 0 1px 0 #7d7166, 0 2px 0 #6b6057, 0 6px 10px rgb(20 12 6 / 0.45);
     }
+}
+
+:root[data-theme='dark'] {
+    color-scheme: dark;
+
+    --bg: #1c1713;
+    --card: #28211b;
+    --text: #f3ebdf;
+    --muted: #afa08e;
+    --border: #40352b;
+    --primary: #d9ef3f;
+    --on-primary: #1f1a0a;
+    --link: #e6cfa6;
+    --selected: #2e2d14;
+    --banner: #3a2f25;
+    --banner-text: #f8deae;
+    --danger: #ff8e85;
+
+    /* zhasnuto: stěna ztmavne, nápis nesvítí */
+    --sign-wall: #6b6057;
+    --sign-letter: #9a8d7f;
+    --sign-sub: #e6dccf;
+    --sign-glow: 0;
+    --cal-closed: #120f0c;
+    --sign-shadow: 0 1px 0 #7d7166, 0 2px 0 #6b6057, 0 6px 10px rgb(20 12 6 / 0.45);
+}
+
+:root[data-theme='light'] {
+    color-scheme: light;
 }
 
 @theme inline {
@@ -630,6 +676,168 @@
         background: var(--selected);
     }
 
+    /* Název salonu v liště jako značka (když má salon vlastní nápis) */
+    .top-brand-sign b {
+        margin-right: -0.22em;
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+    }
+
+    .top-brand-sign span {
+        margin-top: 3px;
+        font-size: 9px;
+        font-weight: 500;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+    }
+
+    .top-btn-icon {
+        width: 40px;
+        padding: 0;
+        justify-content: center;
+    }
+
+    /* Den se šipkami v horní liště (rozvrh) */
+    .top-day {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        margin-right: auto;
+    }
+
+    .top-day-title {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        padding: 0 4px;
+        line-height: 1.1;
+    }
+
+    .top-day-title h1 {
+        font-size: 21px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+    }
+
+    .top-day-title span {
+        overflow: hidden;
+        font-size: 12px;
+        color: var(--muted);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .top-day-extra {
+        display: none;
+    }
+
+    @media (min-width: 640px) {
+        .top-day {
+            gap: 8px;
+        }
+
+        .top-day-extra {
+            display: inline-flex;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .top-day-title h1 {
+            font-size: 28px;
+        }
+
+        .top-day-title span {
+            font-size: 13px;
+        }
+    }
+
+    /* Cedule salonu: stěna s podsvíceným nápisem. Po „zhasnutí“ (tmavá verze) záře zmizí a nápis ztmavne. */
+    .sign {
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        width: 100%;
+        max-width: 600px;
+        min-height: 132px;
+        padding: 26px 16px 22px;
+        border-radius: 14px;
+        background-color: var(--sign-wall);
+        line-height: 1;
+        container-type: inline-size;
+        transition: background-color 0.9s ease;
+    }
+
+    .sign-glow {
+        position: absolute;
+        opacity: var(--sign-glow);
+        pointer-events: none;
+        transition: opacity 0.9s ease;
+    }
+
+    .sign-glow-top {
+        inset: 0 0 auto 0;
+        height: 62%;
+        background: linear-gradient(to bottom, rgb(255 228 188 / 0.98) 0, rgb(247 207 152 / 0.74) 5%, rgb(236 196 145 / 0.36) 20%, rgb(233 192 141 / 0.12) 46%, rgb(233 192 141 / 0) 100%);
+    }
+
+    .sign-glow-left,
+    .sign-glow-right {
+        top: 0;
+        bottom: 0;
+        width: 21%;
+    }
+
+    .sign-glow-left {
+        left: 0;
+        background: linear-gradient(to right, rgb(255 228 188 / 0.9) 0, rgb(242 202 148 / 0.44) 13%, rgb(233 192 141 / 0.12) 48%, rgb(233 192 141 / 0) 100%);
+    }
+
+    .sign-glow-right {
+        right: 0;
+        background: linear-gradient(to left, rgb(255 228 188 / 0.9) 0, rgb(242 202 148 / 0.44) 13%, rgb(233 192 141 / 0.12) 48%, rgb(233 192 141 / 0) 100%);
+    }
+
+    /* Velikost písma podle délky nápisu a šířky cedule: krátký název je velký, dlouhý se vejde na řádek. */
+    .sign-title {
+        position: relative;
+        margin-right: -0.3em;
+        color: var(--sign-letter);
+        font-size: clamp(18px, calc(84cqw / (var(--sign-chars, 8) * 0.95)), 66px);
+        font-weight: 500;
+        letter-spacing: 0.3em;
+        text-shadow: var(--sign-shadow);
+        text-transform: uppercase;
+        white-space: nowrap;
+        user-select: none;
+        transition: color 0.9s ease, text-shadow 0.9s ease;
+    }
+
+    .sign-sub {
+        position: relative;
+        margin-right: -0.46em;
+        color: var(--sign-sub);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.46em;
+        text-transform: uppercase;
+        transition: color 0.9s ease;
+    }
+
+    @media (max-width: 639px) {
+        .sign {
+            min-height: 104px;
+            padding: 22px 12px 18px;
+        }
+    }
+
     /* Obsah: na telefonu místo dole pro spodní nabídku, na počítači ne */
     .admin-main {
         padding-bottom: calc(84px + env(safe-area-inset-bottom));
@@ -789,33 +997,12 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
         order: -1; /* na telefonu je den nahoře a kalendář se rozbaluje pod ním */
         min-width: 0;
         text-align: center;
     }
 
-    .sched-day {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-    }
-
-    .sched-day h1 {
-        min-width: 104px;
-        font-size: 26px;
-        font-weight: 700;
-        line-height: 1.1;
-        letter-spacing: -0.01em;
-    }
-
-    .sched-date {
-        margin-top: -6px;
-        font-size: 14px;
-        color: var(--muted);
-    }
 
     .sched-arrow {
         position: relative;
@@ -938,10 +1125,6 @@
             order: 0;
         }
 
-        .sched-day h1 {
-            font-size: 34px;
-        }
-
         .mini-cal {
             display: block;
         }
@@ -1055,7 +1238,12 @@
     .cal-staff-name {
         flex: 1 1 auto;
         min-width: 0;
+        color: inherit;
         line-height: 1.2;
+    }
+
+    a.cal-staff-name:hover b {
+        text-decoration: underline;
     }
 
     .cal-staff-name b,
@@ -1100,6 +1288,42 @@
         content: '';
         position: absolute;
         inset: -4px;
+    }
+
+    /* Hodně sloupců (velký tým): užší záhlaví bez barevné tečky, ať je vidět celé jméno. */
+    .cal-dense .cal-staff {
+        gap: 4px;
+        padding: 6px 4px 6px 6px;
+    }
+
+    .cal-dense .cal-staff-dot {
+        display: none;
+    }
+
+    .cal-dense .cal-staff-name b {
+        font-size: 12px;
+        letter-spacing: 0.02em;
+    }
+
+    .cal-dense .cal-staff-name span {
+        font-size: 11px;
+    }
+
+    .cal-dense .cal-add {
+        width: 28px;
+        height: 28px;
+        border-radius: 9px;
+    }
+
+    .cal-dense .cal-block-head,
+    .cal-dense .cal-block b,
+    .cal-dense .cal-block-meta {
+        padding-right: 4px;
+        padding-left: 4px;
+    }
+
+    .cal-dense {
+        --cal-gutter: 10px;
     }
 
     .cal-head {
@@ -1163,7 +1387,7 @@
         overflow: hidden;
         border-bottom: 1px solid var(--border);
         border-left: 1px solid var(--border);
-        background: color-mix(in srgb, var(--border) 55%, var(--bg));
+        background: var(--cal-closed);
     }
 
     .cal-col:last-child {

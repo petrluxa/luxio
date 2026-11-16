@@ -11,7 +11,7 @@ class Salon extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'company', 'ico', 'slug', 'phone', 'address', 'timezone', 'settings'];
+    protected $fillable = ['name', 'sign_title', 'sign_subtitle', 'company', 'ico', 'slug', 'phone', 'address', 'timezone', 'settings'];
 
     protected function casts(): array
     {
@@ -21,6 +21,12 @@ class Salon extends Model
     public function getRouteKeyName(): string
     {
         return 'slug';
+    }
+
+    /** Velký nápis na „ceduli“ v záhlaví rozvrhu – vlastní, nebo název salonu. */
+    public function signTitle(): string
+    {
+        return trim((string) $this->sign_title) !== '' ? trim($this->sign_title) : $this->name;
     }
 
     /** Pravidla salonu s doplněnými výchozími hodnotami. */
@@ -34,10 +40,10 @@ class Salon extends Model
         return $this->hasMany(User::class);
     }
 
-    /** Kadeřnice, ke kterým se lze objednat – v pořadí, v jakém do salonu přibyly (sloupce rozvrhu). */
+    /** Tým, ke kterému se lze objednat – v pořadí sloupců rozvrhu (řadí správce). */
     public function staff(): HasMany
     {
-        return $this->hasMany(User::class)->where('is_bookable', true)->orderBy('id');
+        return $this->hasMany(User::class)->where('is_bookable', true)->orderBy('sort')->orderBy('id');
     }
 
     public function services(): HasMany

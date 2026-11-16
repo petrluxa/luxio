@@ -46,8 +46,12 @@ describe('rozvrh dne', function () {
             ->assertSee('10:00 (45m)')
             ->assertSee('Jana Nováková')
             ->assertSee('603 123 456')
-            // Velký název salonu nahoře a měsíční kalendář vedle rozvrhu.
-            ->assertSee($this->salon->name)
+            // Den se šipkami v horní liště, název salonu na ceduli a měsíční kalendář vedle rozvrhu.
+            ->assertSeeInOrder(['top-day', 'Středa', App\Support\Cz::dateFull(at('00:00')), 'Dnes', 'Zítra', 'Týden'], false)
+            ->assertSee('class="sign-title">'.e($this->salon->name), false)
+            // Na ceduli není vypínač – vzhled se přepíná tlačítkem v liště.
+            ->assertDontSee('sign-switch', false)
+            ->assertSee('Přepnout na tmavou verzi', false)
             ->assertSee('Listopad 2026')
             // Osobní přehled „Dnes“ správce bez zákaznic v nabídce nemá.
             ->assertDontSee('<span>Dnes</span>', false);
@@ -93,6 +97,135 @@ describe('rozvrh dne', function () {
         // Parametr se u kadeřnice ignoruje – uložila si neděli sobě.
         expect($this->sabina->workingHours()->pluck('weekday')->all())->toBe([7])
             ->and($this->sarka->workingHours()->count())->toBe(10);
+    });
+});
+
+describe('tým s různým zaměřením', function () {
+    beforeEach(function () {
+        $this->sabina->update(['position' => 'kadeřnice']);
+        $this->sarka->update(['position' => 'Kadeřnice']);          // velké písmeno je tatáž skupina
+        $this->ivana = staffMember($this->salon, attributes: ['name' => 'Ivana', 'position' => 'pedikúra', 'login' => null, 'password' => null]);
+        $this->nikola = staffMember($this->salon, attributes: ['name' => 'Nikola', 'position' => 'manikúra']);
+        $this->monika = staffMember($this->salon, attributes: ['name' => 'Monika', 'position' => 'manikúra']);
+        $this->pedicure = service($this->salon, ['name' => 'Pedikúra', 'price_from' => 450, 'work_1' => 60], $this->ivana);
+    });
+
+    test('rozvrh nabízí skupiny podle zaměření a u jména ukazuje, kdo co dělá', function () {
+        $this->manager->create($this->jana, [$this->pedicure], at('10:00'), $this->ivana);
+        $this->actingAs($this->spravce);
+
+        $this->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()
+            ->assertSee('--cal-cols: 5', false)
+            ->assertSeeInOrder(['Celý salon', 'Kadeřnice', 'Pedikúra', 'Manikúra'])
+            ->assertSee('pedikúra · 9:00–17:00');
+
+        // Skupina manikúra: jen Nikola a Monika, pedikúra v ní není vidět.
+        $this->get('/admin/kalendar?obor='.urlencode('manikúra').'&datum='.TEST_DAY)->assertOk()
+            ->assertSee('--cal-cols: 2', false)
+            ->assertSee('Nikola')->assertSee('Monika')
+            ->assertDontSee('Jana Nováková');
+
+        // Skupina s jedním člověkem je rovnou jeho den; neznámá skupina = celý salon.
+        $this->get('/admin/kalendar?obor='.urlencode('pedikúra').'&datum='.TEST_DAY)->assertOk()
+            ->assertSee('--cal-cols: 1', false)->assertSee('Jana Nováková');
+        $this->get('/admin/kalendar?obor=neexistuje&datum='.TEST_DAY)->assertOk()->assertSee('--cal-cols: 5', false);
+
+        // Týden jednoho člověka ze skupiny.
+        $this->get('/admin/kalendar?obor='.urlencode('manikúra')."&kadernice={$this->monika->id}&zobrazeni=tyden&datum=".TEST_DAY)
+            ->assertOk()->assertSee('Monika');
+    });
+
+    test('bez zaměření se skupiny nenabízejí', function () {
+        App\Models\User::query()->update(['position' => null]);
+
+        $this->actingAs($this->spravce)->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()->assertSee('Celý salon')->assertDontSee('obor=', false);
+    });
+
+    test('nový člen týmu jde na konec rozvrhu a správce pořadí sloupců mění šipkami', function () {
+        $order = fn () => $this->salon->staff()->pluck('name')->all();
+
+        expect($order())->toBe(['Sabina', 'Šárka', 'Ivana', 'Nikola', 'Monika']);
+
+        $this->actingAs($this->spravce);
+
+        $this->post('/admin/kadernice', ['name' => 'Dana', 'position' => ' kosmetika ', 'role' => 'staff', 'color' => '#8E7A73', 'is_bookable' => '1'])->assertRedirect();
+
+        expect($order())->toBe(['Sabina', 'Šárka', 'Ivana', 'Nikola', 'Monika', 'Dana'])
+            ->and($this->salon->staff()->where('name', 'Dana')->sole()->position)->toBe('kosmetika');
+
+        $this->post("/admin/kadernice/{$this->monika->id}/poradi", ['direction' => 'up']);
+        $this->post("/admin/kadernice/{$this->sabina->id}/poradi", ['direction' => 'down']);
+        $this->post("/admin/kadernice/{$this->sarka->id}/poradi", ['direction' => 'up']);   // první už výš nejde
+
+        expect($order())->toBe(['Šárka', 'Sabina', 'Ivana', 'Monika', 'Nikola', 'Dana']);
+
+        $this->get('/admin/kadernice')->assertOk()->assertSeeInOrder(['Šárka', 'Sabina', 'Ivana', 'Monika', 'Nikola', 'Dana'])->assertSee('pedikúra');
+        $this->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()->assertSeeInOrder(['Ivana', 'Monika', 'Nikola', 'Dana']);
+
+        // Řadit smí jen správce.
+        $this->actingAs($this->sabina)->post("/admin/kadernice/{$this->sabina->id}/poradi", ['direction' => 'up'])->assertForbidden();
+    });
+
+    test('zákaznice vidí u jména zaměření a nabídku služeb podle toho, koho vybere', function () {
+        $options = app(App\Services\Booking\BookingWizard::class)->options($this->salon);
+
+        expect($options['staffHeading'])->toBe('Ke komu')
+            ->and(array_column($options['staff'], 'label'))->toBe(['Sabina · kadeřnice', 'Šárka · Kadeřnice', 'Ivana · pedikúra', 'Nikola · manikúra', 'Monika · manikúra'])
+            ->and(collect($options['services'])->firstWhere('name', 'Pedikúra')['staffIds'])->toBe([$this->ivana->id]);
+
+        // Veřejná stránka se s tím vykreslí.
+        $this->get('/s/'.$this->salon->slug)->assertOk();
+    });
+});
+
+describe('cedule salonu a vzhled', function () {
+    test('vlastní nápis a podtitul se nastaví v údajích salonu a ukážou se v rozvrhu i v liště', function () {
+        $this->actingAs($this->spravce);
+
+        $this->post('/admin/nastaveni', [
+            'name' => $this->salon->name, 'slug' => $this->salon->slug, 'sign_title' => ' Aura ', 'sign_subtitle' => 'Beauty Studio',
+            'slot_step' => 15, 'min_notice_hours' => 2, 'max_days_ahead' => 60, 'cancel_hours' => 24, 'reminder_hours' => 48,
+        ])->assertSessionHas('status');
+
+        expect($this->salon->fresh())->sign_title->toBe('Aura')->sign_subtitle->toBe('Beauty Studio')
+            ->and($this->salon->fresh()->signTitle())->toBe('Aura');
+
+        $this->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()
+            ->assertSee('class="sign-title">Aura', false)
+            ->assertSee('Beauty Studio')
+            ->assertSee('--sign-chars: 4', false);
+
+        // Na ostatních stránkách je nápis v liště místo dne.
+        $this->get('/admin/vice')->assertOk()->assertSee('top-brand-sign', false)->assertSee('Aura')->assertDontSee('top-day', false);
+
+        // Prázdný nápis = zpět na název salonu.
+        $this->post('/admin/nastaveni', [
+            'name' => $this->salon->name, 'slug' => $this->salon->slug, 'sign_title' => '', 'sign_subtitle' => '',
+            'slot_step' => 15, 'min_notice_hours' => 2, 'max_days_ahead' => 60, 'cancel_hours' => 24, 'reminder_hours' => 48,
+        ]);
+
+        expect($this->salon->fresh())->sign_title->toBeNull()->and($this->salon->fresh()->signTitle())->toBe($this->salon->name);
+    });
+
+    test('jméno ve sloupci vede na rozvrh jednoho člověka a výběr jde zrušit', function () {
+        $this->actingAs($this->spravce);
+
+        $this->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()
+            ->assertSee('kadernice='.$this->sarka->id, false);
+
+        $this->get("/admin/kalendar?kadernice={$this->sarka->id}&datum=".TEST_DAY)->assertOk()
+            ->assertSee('--cal-cols: 1', false)
+            ->assertSee('Šárka ×');
+
+        $this->get("/admin/kalendar?kadernice={$this->sarka->id}&zobrazeni=tyden&datum=".TEST_DAY)->assertOk()
+            ->assertSeeInOrder(['top-day', 'Týden', '9. 11. – 15.'], false);
+    });
+
+    test('světlá a tmavá verze jdou přepnout ručně – stránka si volbu načte hned', function () {
+        $this->actingAs($this->spravce);
+
+        $this->get('/admin/vice')->assertOk()->assertSee("localStorage.getItem('luxio-theme')", false)->assertSee('$store.theme.toggle()', false);
+        $this->get('/admin/ucet')->assertOk()->assertSee('Vzhled')->assertSee('Podle zařízení');
     });
 });
 

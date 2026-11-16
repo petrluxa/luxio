@@ -27,12 +27,22 @@
     {{-- Horní lišta: název salonu a na počítači hlavní nabídka (na telefonu je nabídka dole). --}}
     <header class="top-bar">
         <div class="top-bar-inner">
-            <a class="top-brand" href="{{ route('admin.calendar') }}">
-                <b>{{ $salon->name }}</b>
-                @if ($salon->address || $salon->phone)
-                    <span>{{ collect([$salon->address, \App\Support\Cz::phone($salon->phone)])->filter()->join(' · ') }}</span>
-                @endif
-            </a>
+            {{-- Vlevo název salonu; rozvrh sem dává den se šipkami (název má na ceduli pod lištou). --}}
+            @hasSection('top-left')
+                @yield('top-left')
+            @elseif ($salon->sign_title)
+                <a class="top-brand top-brand-sign" href="{{ route('admin.calendar') }}">
+                    <b>{{ $salon->sign_title }}</b>
+                    @if ($salon->sign_subtitle)<span>{{ $salon->sign_subtitle }}</span>@endif
+                </a>
+            @else
+                <a class="top-brand" href="{{ route('admin.calendar') }}">
+                    <b>{{ $salon->name }}</b>
+                    @if ($salon->address || $salon->phone)
+                        <span>{{ collect([$salon->address, \App\Support\Cz::phone($salon->phone)])->filter()->join(' · ') }}</span>
+                    @endif
+                </a>
+            @endif
 
             <nav class="top-nav" aria-label="Hlavní nabídka">
                 @foreach ($nav as $key => [$route, $label])
@@ -44,6 +54,11 @@
                         @endif
                     </a>
                 @endforeach
+
+                <button type="button" class="top-btn top-btn-icon" x-data x-on:click="$store.theme.toggle()"
+                        :aria-label="$store.theme.dark ? 'Přepnout na světlou verzi' : 'Přepnout na tmavou verzi'" :aria-pressed="$store.theme.dark">
+                    @include('partials.icon', ['name' => 'moon', 'size' => 18])
+                </button>
 
                 <details class="top-user" x-data x-on:click.outside="$el.removeAttribute('open')">
                     <summary @class(['top-btn', 'is-on' => $tab === 'account'])>

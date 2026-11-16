@@ -22,7 +22,12 @@ Rozhodnutí z 16. 11. 2026:
 - Správce nemusí být kadeřnice (recepce, manažer): pak nemá sloupec v rozvrhu ani přehled „Dnes“
   a po přihlášení vidí rozvrh dne všech kadeřnic.
 - Kadeřnice může být v rozvrhu i bez vlastního přihlášení – rezervace jí pak zapisuje správce.
-  Přihlašovací jméno a heslo jí nastaví správce (Více → Kadeřnice).
+  Přihlašovací jméno a heslo jí nastaví správce (Admin → Tým).
+- **Tým nejsou jen kadeřnice.** Každý člen týmu má nepovinné **zaměření** (kadeřnice, manikúra,
+  pedikúra, kosmetika… – volný text) a **pořadí** sloupce v rozvrhu, které správce mění šipkami.
+  Nový člen se řadí na konec. Kde má salon víc zaměření, dělí se podle nich rozvrh na skupiny
+  a zákaznice vidí zaměření u jména („Lena · pedikúra“). V kódu i v textech zůstává pro člena týmu
+  slovo „kadeřnice“ tam, kde jde o kadeřnictví obecně.
 
 ## 3. Přístup zákaznice (token)
 
@@ -173,10 +178,14 @@ na telefonu je nabídka dole. Posouvá se vždy celá stránka, žádné vnitřn
 
 1. **Dnes** – osobní přehled kadeřnice: časová osa dne, další zákaznice nahoře, rychlé akce
    (zavolat, poznámka, nepřišla). Správce bez vlastních zákaznic ho nemá.
-2. **Rozvrh** – vlevo **měsíční kalendář** (skok na den, tečka = den s rezervacemi), uprostřed den
-   se šipkami a tlačítky Dnes / Zítra, přepínač Den / Týden a výběr kadeřnice. Pod tím mřížka:
-   **sloupce = kadeřnice** (jako kurty; v pořadí, v jakém do salonu přibyly), řádky po půl hodině,
-   v záhlaví jméno a začátek a konec pracovní doby. Rezervace ukazuje čas a délku, jméno, telefon
+2. **Rozvrh** – den se šipkami, Dnes / Zítra a přepínač Týden jsou **v horní liště** (místo názvu
+   salonu). V panelu pod ní vlevo **měsíční kalendář** (skok na den, tečka = den s rezervacemi)
+   a uprostřed **cedule salonu**: podsvícený nápis na stěně (vlastní nápis a podtitul z údajů salonu,
+   jinak název salonu), pod ní skupiny podle zaměření. Jeden člověk se vybírá
+   kliknutím na jeho jméno v záhlaví sloupce; výběr se ruší štítkem se jménem. Pod tím mřížka:
+   **sloupce = členové týmu** (jako kurty; pořadí určuje správce), řádky po půl hodině,
+   v záhlaví jméno, zaměření a začátek a konec pracovní doby. Nad mřížkou **skupiny podle zaměření**
+   (Celý salon, Kadeřnice, Manikúra…) a výběr jednoho člověka; od osmi sloupců je záhlaví zhuštěné. Rezervace ukazuje čas a délku, jméno, telefon
    a službu; barva podle stavu (potvrzená neonová, čeká hnědá, proběhlá nebo zaplacená ztlumená).
    Kliknutí na místo = nová rezervace (i mimo pracovní dobu), tlačítko + u jména = další zákaznice,
    přetažení = přesun. Záhlaví sloupců se na počítači drží pod horní lištou; na telefonu se víc sloupců
@@ -198,16 +207,22 @@ na telefonu je nabídka dole. Posouvá se vždy celá stránka, žádné vnitřn
    vlastní službu (dostane ji jen ona) a tu si i upravit; společné služby a pořadí upravuje owner,
    který také vidí a upraví ceník kterékoliv kadeřnice.
 9. **Pracovní doba a volno** – každá kadeřnice sobě, správce komukoliv
-10. **Kadeřnice** – seznam, přihlašovací jméno a heslo, oprávnění, barva v rozvrhu (owner)
+10. **Tým** – seznam v pořadí sloupců rozvrhu (šipky), jméno, zaměření, přihlašovací jméno a heslo,
+    oprávnění, barva v rozvrhu (owner)
 11. **Nastavení** – pravidla z 4.3, údaje salonu a dokladu (provozovatel, IČO) (owner)
-12. **Můj účet** – změna hesla, upozornění na tomto zařízení, odhlášení
+12. **Můj účet** – vzhled (světlý / tmavý / podle zařízení), změna hesla, upozornění na tomto zařízení,
+    odhlášení
+
+**Světlá a tmavá verze:** výchozí je podle nastavení zařízení; přepíná se tlačítkem s měsícem v horní liště
+nebo v účtu (vypínač přímo na ceduli správce nechtěl). Volbu si pamatuje prohlížeč (`localStorage`), ne server.
 
 ## 9. Datový model
 
 ```
-salons            id, name, company null, ico null, slug, phone, address, timezone, settings(json), timestamps
-users             id, salon_id, name, login null (unique), password null, role(owner|staff), color,
-                  is_bookable, timestamps        -- bez login/password se nepřihlásí
+salons            id, name, sign_title null, sign_subtitle null (nápis a podtitul cedule), company null, ico null, slug, phone, address, timezone, settings(json), timestamps
+users             id, salon_id, name, position null (zaměření), login null (unique), password null,
+                  role(owner|staff), color, is_bookable, sort (pořadí sloupce), timestamps
+                  -- bez login/password se nepřihlásí
 services          id, salon_id, name, description, price_from, price_to null, work_1, pause, work_2,
                   buffer_after, is_active, sort, timestamps
 staff_service     user_id, service_id, price_from null, work_1 null, pause null, work_2 null
@@ -247,9 +262,8 @@ notification_log  id, notifiable, type, channel(push), booking_id null, sent_at,
 
 - Název aplikace a doména
 - Hosting – zkušebně v podsložce jiného webu na sdíleném hostingu (bez příkazové řádky); ostrý zatím neurčen
-- Kolik kadeřnic bude od začátku – rozhodnuto: Sabina, Šárka, třetí kadeřnice a modelace nehtů
-  (vlastní sloupec i služby) + správce salonu; zatím jeden salon
-- Pořadí sloupců v rozvrhu je zatím podle založení – až bude potřeba, přidat ruční řazení
+- Kolik lidí bude od začátku – rozhodnuto: sedm kadeřnic, pedikúra, kosmetika a dvě manikúry
+  (každý vlastní sloupec, služby podle zaměření) + správce salonu; zatím jeden salon
 - Katalog L'Oréal Professionnel je první návrh sestavený bez oficiálního ceníku – kadeřnice ho projdou,
   nepoužívané skryjí a chybějící doplní; odstíny barev se zapisují až u návštěvy
 - Bude se později prodávat dalším salonům? (pak od začátku vše přes `salon_id` – model s tím počítá)

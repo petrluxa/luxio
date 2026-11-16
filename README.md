@@ -29,8 +29,8 @@ php artisan queue:work          # ve druhém okně: odesílá upozornění
 
 Výchozí `.env` používá SQLite, takže není potřeba nic dalšího instalovat. Pro MySQL nastavte `DB_CONNECTION=mysql` a přístupy k databázi.
 
-Ukázková data (jen pro vývoj): správce salonu `admin`, kadeřnice `sabina`, `sarka`, `tereza` a modelace
-nehtů `nehty` – heslo všude `heslo123`, veřejný odkaz `/s/luxio`. Do administrace se přihlašuje jménem, ne e-mailem.
+Ukázková data (jen pro vývoj): správce salonu `admin`, kadeřnice `sabina`, `sarka`, `tereza`, manikúra
+`nikola`, pedikúra `ivana` a kosmetika `dana` – heslo všude `heslo123`, veřejný odkaz `/s/luxio`. Do administrace se přihlašuje jménem, ne e-mailem.
 
 Na Windows potřebuje generování klíčů a šifrování upozornění proměnnou `OPENSSL_CONF`
 s cestou k `openssl.cnf` (v balíku PHP ve složce `extras/ssl`).

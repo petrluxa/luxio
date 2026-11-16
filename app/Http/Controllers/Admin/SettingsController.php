@@ -66,6 +66,8 @@ class SettingsController extends AdminController
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
+            'sign_title' => ['nullable', 'string', 'max:40'],
+            'sign_subtitle' => ['nullable', 'string', 'max:60'],
             'slug' => ['required', 'string', 'max:60', 'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/', Rule::unique('salons', 'slug')->ignore($salon->id)],
             'phone' => ['nullable', 'string', 'regex:/^\+\d{9,15}$/'],
             'address' => ['nullable', 'string', 'max:255'],
@@ -97,6 +99,8 @@ class SettingsController extends AdminController
         // approve_new_customers = false se musí uložit výslovně (výchozí je true).
         $salon->update([
             'name' => $data['name'],
+            'sign_title' => isset($data['sign_title']) && trim($data['sign_title']) !== '' ? trim($data['sign_title']) : null,
+            'sign_subtitle' => isset($data['sign_subtitle']) && trim($data['sign_subtitle']) !== '' ? trim($data['sign_subtitle']) : null,
             'slug' => $data['slug'],
             'phone' => $data['phone'],
             'address' => $data['address'] ?? null,
@@ -115,7 +119,7 @@ class SettingsController extends AdminController
 
         return view('admin.staff-index', [
             'tab' => 'more',
-            'users' => $this->salon()->users()->orderByDesc('is_bookable')->orderBy('name')->get(),
+            'users' => $this->salon()->users()->orderByDesc('is_bookable')->orderBy('sort')->orderBy('id')->get(),
         ]);
     }
 
@@ -126,7 +130,11 @@ class SettingsController extends AdminController
         $used = $this->salon()->users()->pluck('color')->map(fn (string $c) => strtoupper($c))->all();
         $color = collect(SalonInstaller::COLORS)->first(fn (string $c) => ! in_array($c, $used, true)) ?? SalonInstaller::COLORS[0];
 
-        return view('admin.staff', ['tab' => 'more', 'member' => new User(['is_bookable' => true, 'color' => $color, 'role' => UserRole::Staff])]);
+        return view('admin.staff', [
+            'tab' => 'more',
+            'member' => new User(['is_bookable' => true, 'color' => $color, 'role' => UserRole::Staff]),
+            'positions' => $this->positions(),
+        ]);
     }
 
     public function storeStaff(Request $request): RedirectResponse
@@ -147,7 +155,45 @@ class SettingsController extends AdminController
     {
         $this->ownerOnly();
 
-        return view('admin.staff', ['tab' => 'more', 'member' => $this->ownStaff($member)]);
+        return view('admin.staff', ['tab' => 'more', 'member' => $this->ownStaff($member), 'positions' => $this->positions()]);
+    }
+
+    /** Posun sloupce v rozvrhu o jedno místo doleva / doprava (v seznamu nahoru / dolů). */
+    public function reorderStaff(Request $request, User $member): RedirectResponse
+    {
+        $this->ownerOnly();
+        $member = $this->ownStaff($member);
+
+        $ordered = $this->staffList()->values();
+        $index = $ordered->search(fn (User $u) => $u->is($member));
+        $target = $index === false ? false : $index + ($request->input('direction') === 'up' ? -1 : 1);
+
+        if ($index !== false && $ordered->has($target)) {
+            $ids = $ordered->modelKeys();
+            [$ids[$index], $ids[$target]] = [$ids[$target], $ids[$index]];
+
+            foreach ($ids as $position => $id) {
+                User::whereKey($id)->update(['sort' => $position + 1]);
+            }
+        }
+
+        return back();
+    }
+
+    /**
+     * Zaměření k napovězení ve formuláři: co už salon používá a obvyklá další.
+     *
+     * @return list<string>
+     */
+    private function positions(): array
+    {
+        return $this->salon()->users()->whereNotNull('position')->pluck('position')
+            ->merge(['kadeřnice', 'manikúra', 'pedikúra', 'kosmetika'])
+            ->map(fn (string $position) => trim($position))
+            ->filter()
+            ->unique(fn (string $position) => mb_strtolower($position))
+            ->values()
+            ->all();
     }
 
     public function updateStaff(Request $request, User $member): RedirectResponse
@@ -194,6 +240,7 @@ class SettingsController extends AdminController
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:60'],
+            'position' => ['nullable', 'string', 'max:40'],
             'login' => ['nullable', 'string', 'regex:'.SalonInstaller::LOGIN_PATTERN, Rule::unique('users', 'login')->ignore($member?->id)],
             'password' => [$needsPassword ? 'required' : 'nullable', Password::min(8)],
             'role' => ['required', Rule::enum(UserRole::class)],
@@ -205,6 +252,7 @@ class SettingsController extends AdminController
         ]);
 
         $data['is_bookable'] = $request->boolean('is_bookable');
+        $data['position'] = isset($data['position']) && trim($data['position']) !== '' ? trim($data['position']) : null;
 
         if ($data['login'] === null) {
             $data['password'] = null;

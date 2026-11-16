@@ -20,6 +20,8 @@
         <link rel="manifest" href="{{ route('customer.manifest') }}">
     @endisset
     <title>@hasSection('title')@yield('title') · @endif{{ $appTitle ?? config('app.name') }}</title>
+    {{-- Ručně zvolená světlá nebo tmavá verze se nastaví dřív, než se stránka vykreslí. --}}
+    <script>try{var t=localStorage.getItem('luxio-theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme',t)}}catch(e){}</script>
     @stack('head')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>

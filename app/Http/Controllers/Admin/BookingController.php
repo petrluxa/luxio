@@ -218,6 +218,7 @@ class BookingController extends AdminController
             'booking' => $booking,
             'wizard' => [
                 'staff' => $options['staff'],
+                'staffHeading' => $options['staffHeading'],
                 'services' => [],
                 'fixed' => true,
                 'slotsUrl' => route('admin.bookings.slots', ['presun' => $booking->id]),

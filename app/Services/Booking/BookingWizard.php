@@ -32,7 +32,7 @@ final class BookingWizard
      * Každá kadeřnice má vlastní ceník, proto má služba popisek (délka · cena) pro každou zvlášť
      * a pro volbu „Kdokoliv“ souhrnný („od“ nejnižší ceny).
      *
-     * @return array{staff: list<array{id: int, name: string}>, services: list<array<string, mixed>>}
+     * @return array{staff: list<array{id: int, name: string, label: string}>, services: list<array<string, mixed>>, staffHeading: string}
      */
     public function options(Salon $salon, ?int $scopeStaffId = null): array
     {
@@ -56,9 +56,17 @@ final class BookingWizard
             ->filter(fn (array $service) => $service['staffIds'] !== [])
             ->values();
 
+        // Když má salon víc zaměření, je u jména vidět, kdo co dělá („Lena · pedikúra“).
+        $mixed = $staff->map(fn (User $u) => $u->positionKey())->filter()->unique()->count() > 1;
+
         return [
-            'staff' => $staff->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name])->all(),
+            'staff' => $staff->map(fn (User $u) => [
+                'id' => $u->id,
+                'name' => $u->name,
+                'label' => $u->name.($mixed && $u->positionKey() ? ' · '.trim($u->position) : ''),
+            ])->all(),
             'services' => $services->all(),
+            'staffHeading' => $mixed ? 'Ke komu' : 'Kadeřnice',
         ];
     }
 

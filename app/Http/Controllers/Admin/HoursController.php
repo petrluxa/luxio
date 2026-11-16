@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 /**
- * Pracovní doba (týdenní rozvrh, až dva intervaly denně = polední pauza),
+ * Pracovní doba (týdenní rozvrh: den je zavřený, nebo má až dva intervaly = polední pauza),
  * volno / blokace a výjimky pro jeden den (pracovní sobota, otevřeno ve svátek).
  */
 class HoursController extends AdminController
@@ -50,6 +50,11 @@ class HoursController extends AdminController
         $rows = [];
 
         foreach (range(1, 7) as $weekday) {
+            // Den označený „Zavřeno“ se ukládá bez úseků, ať v polích zůstalo cokoliv.
+            if ($request->boolean("closed.$weekday")) {
+                continue;
+            }
+
             foreach ((array) $request->input("hours.$weekday", []) as $i => $interval) {
                 $from = trim((string) ($interval['from'] ?? ''));
                 $to = trim((string) ($interval['to'] ?? ''));

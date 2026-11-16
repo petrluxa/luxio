@@ -94,3 +94,4 @@ Route::get('/kadernice/nova', [SettingsController::class, 'createStaff'])->name(
 Route::post('/kadernice', [SettingsController::class, 'storeStaff'])->name('staff.store');
 Route::get('/kadernice/{member}', [SettingsController::class, 'editStaff'])->whereNumber('member')->name('staff.edit');
 Route::post('/kadernice/{member}', [SettingsController::class, 'updateStaff'])->whereNumber('member')->name('staff.update');
+Route::post('/kadernice/{member}/poradi', [SettingsController::class, 'reorderStaff'])->whereNumber('member')->name('staff.reorder');

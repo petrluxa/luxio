@@ -33,15 +33,24 @@ class CalendarController extends AdminController
         $view = $request->query('zobrazeni') === 'tyden' ? 'tyden' : 'den';
         $date = $this->date($request->query('datum'));
 
-        // Den ukazuje všechny kadeřnice vedle sebe, dokud si přihlášený nevybere jednu.
-        // Týden je vždy jedné kadeřnice.
-        $picked = $staffList->firstWhere('id', $request->integer('kadernice'));
-        $staff = $picked ?? $this->currentStaff($request);
-        $all = $view === 'den' && ! $picked && $staffList->count() > 1;
+        // Skupiny podle zaměření (kadeřnice, manikúra, pedikúra…) – jako seskupení kurtů.
+        // Nabízejí se, jen když je zaměření v salonu víc.
+        $groups = $staffList->filter(fn (User $u) => $u->positionKey() !== null)
+            ->unique(fn (User $u) => $u->positionKey())
+            ->mapWithKeys(fn (User $u) => [$u->positionKey() => trim($u->position)]);
+        $groups = $groups->count() > 1 ? $groups : collect();
+        $group = $groups->has(mb_strtolower((string) $request->query('obor'))) ? mb_strtolower((string) $request->query('obor')) : null;
+        $pool = $group ? $staffList->filter(fn (User $u) => $u->positionKey() === $group)->values() : $staffList;
+
+        // Den ukazuje celou skupinu (nebo všechny) vedle sebe, dokud si přihlášený nevybere jednoho.
+        // Týden je vždy jednoho člověka.
+        $picked = $pool->firstWhere('id', $request->integer('kadernice'));
+        $staff = $picked ?? ($group ? $pool->first() : $this->currentStaff($request));
+        $all = $view === 'den' && ! $picked && $pool->count() > 1;
 
         $from = $view === 'tyden' ? $date->startOfWeek() : $date;
         $to = $view === 'tyden' ? $from->addDays(6) : $date;
-        $members = $all ? $staffList : new EloquentCollection([$staff]);
+        $members = $all ? $pool : new EloquentCollection([$staff]);
 
         $bookings = Booking::query()
             ->where('salon_id', $this->salon()->id)
@@ -76,8 +85,11 @@ class CalendarController extends AdminController
         return view('admin.calendar', [
             'tab' => 'calendar',
             'width' => 'full',
+            'salon' => $this->salon(),
             'staff' => $staff,
-            'staffList' => $staffList,
+            'staffList' => $pool,
+            'groups' => $groups,
+            'group' => $group,
             'all' => $all,
             'view' => $view,
             'date' => $date,

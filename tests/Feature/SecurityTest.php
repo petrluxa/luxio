@@ -131,12 +131,12 @@ describe('instalace na ostrém serveru', function () {
         $salon = Salon::where('slug', 'luxio')->sole();
         $bookings = Booking::where('salon_id', $salon->id);
 
-        expect($salon->staff()->pluck('name')->all())->toEqualCanonicalizing(['Sabina', 'Šárka', 'Tereza', 'Modelace nehtů'])
+        expect($salon->staff()->pluck('name')->all())->toBe(['Sabina', 'Šárka', 'Tereza', 'Nikola', 'Ivana', 'Dana'])
             ->and($salon->users()->where('role', UserRole::Owner)->sole())->login->toBe('admin')->is_bookable->toBeFalse()
             ->and($salon->customers()->count())->toBe(20)
             ->and($salon->products()->count())->toBeGreaterThan(100)
             ->and($bookings->count())->toBeGreaterThan(50)
-            ->and($bookings->distinct()->pluck('staff_id'))->toHaveCount(4)
+            ->and($bookings->distinct()->pluck('staff_id'))->toHaveCount(6)
             ->and(Booking::where('salon_id', $salon->id)->whereNotNull('paid_at')->count())->toBeGreaterThan(10);
 
         // Čísla dokladů se neopakují.

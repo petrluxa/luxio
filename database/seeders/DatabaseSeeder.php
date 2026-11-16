@@ -24,7 +24,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Event;
 
 /**
- * Ukázková data pro vývoj: 1 salon, správce, 3 kadeřnice a modelace nehtů, služby, pracovní doba,
+ * Ukázková data pro vývoj: 1 salon, správce, 3 kadeřnice, manikúra, pedikúra a kosmetika, služby, pracovní doba,
  * katalog přípravků, 20 zákaznic a rezervace za poslední měsíc i na další tři týdny
  * (proběhlé návštěvy mají zapsané přípravky a doklad).
  */
@@ -44,6 +44,8 @@ class DatabaseSeeder extends Seeder
         Event::fakeFor(function () {
             $salon = Salon::create([
                 'name' => 'Kadeřnictví Luxio',
+                'sign_title' => 'Luxio',
+                'sign_subtitle' => 'Kadeřnictví',
                 'company' => 'Ukázkový salon s.r.o.',
                 'ico' => '12345678',
                 'slug' => 'luxio',
@@ -66,6 +68,7 @@ class DatabaseSeeder extends Seeder
             $sabina = User::create([
                 'salon_id' => $salon->id,
                 'name' => 'Sabina',
+                'position' => 'kadeřnice',
                 'login' => 'sabina',
                 'password' => 'heslo123',
                 'role' => UserRole::Staff,
@@ -77,6 +80,7 @@ class DatabaseSeeder extends Seeder
             $sarka = User::create([
                 'salon_id' => $salon->id,
                 'name' => 'Šárka',
+                'position' => 'kadeřnice',
                 'login' => 'sarka',
                 'password' => 'heslo123',
                 'role' => UserRole::Staff,
@@ -88,6 +92,7 @@ class DatabaseSeeder extends Seeder
             $tereza = User::create([
                 'salon_id' => $salon->id,
                 'name' => 'Tereza',
+                'position' => 'kadeřnice',
                 'login' => 'tereza',
                 'password' => 'heslo123',
                 'role' => UserRole::Staff,
@@ -97,11 +102,35 @@ class DatabaseSeeder extends Seeder
 
             $nails = User::create([
                 'salon_id' => $salon->id,
-                'name' => 'Modelace nehtů',
-                'login' => 'nehty',
+                'name' => 'Nikola',
+                'position' => 'manikúra',
+                'login' => 'nikola',
                 'password' => 'heslo123',
                 'role' => UserRole::Staff,
                 'color' => '#8C5A5A',
+                'is_bookable' => true,
+            ]);
+
+            // Další zaměření v salonu: rozvrh se podle nich dělí na skupiny.
+            $pedicure = User::create([
+                'salon_id' => $salon->id,
+                'name' => 'Ivana',
+                'position' => 'pedikúra',
+                'login' => 'ivana',
+                'password' => 'heslo123',
+                'role' => UserRole::Staff,
+                'color' => '#6A6F8C',
+                'is_bookable' => true,
+            ]);
+
+            $beauty = User::create([
+                'salon_id' => $salon->id,
+                'name' => 'Dana',
+                'position' => 'kosmetika',
+                'login' => 'dana',
+                'password' => 'heslo123',
+                'role' => UserRole::Staff,
+                'color' => '#8A7A3F',
                 'is_bookable' => true,
             ]);
 
@@ -111,7 +140,21 @@ class DatabaseSeeder extends Seeder
             $tereza->services()->attach($services->mapWithKeys(fn (Service $service) => [
                 $service->id => $service->name === 'Dámský střih' ? ['price_from' => 650, 'work_1' => 40] : ['price_from' => null, 'work_1' => null],
             ])->all());
-            $nailServices = $this->nailServices($salon, $nails, $services->count());
+            $nailServices = $this->ownServices($salon, $nails, [
+                ['Modelace nehtů – nová', 'Gelová modelace včetně úpravy nehtového lůžka.', 900, 105],
+                ['Doplnění modelace', null, 650, 80],
+                ['Gel lak', 'Manikúra a gel lak.', 450, 55],
+                ['Manikúra', null, 350, 40],
+            ]);
+            $pedicureServices = $this->ownServices($salon, $pedicure, [
+                ['Pedikúra', 'Klasická mokrá pedikúra.', 450, 60],
+                ['Pedikúra s gel lakem', null, 650, 85],
+            ]);
+            $beautyServices = $this->ownServices($salon, $beauty, [
+                ['Kosmetické ošetření pleti', 'Čištění, maska a masáž obličeje.', 750, 60],
+                ['Úprava a barvení obočí', null, 220, 20],
+                ['Barvení řas', null, 180, 20],
+            ]);
 
             $this->workingHours($sabina, [
                 1 => [['09:00', '12:00'], ['13:00', '17:00']],
@@ -139,6 +182,16 @@ class DatabaseSeeder extends Seeder
                 3 => [['09:00', '12:00'], ['13:00', '17:00']],
                 4 => [['13:00', '19:00']],
             ]);
+            $this->workingHours($pedicure, [
+                1 => [['08:00', '14:00']],
+                3 => [['08:00', '14:00']],
+                5 => [['08:00', '14:00']],
+            ]);
+            $this->workingHours($beauty, [
+                2 => [['10:00', '18:00']],
+                3 => [['10:00', '18:00']],
+                4 => [['10:00', '18:00']],
+            ]);
 
             app(ProductCatalog::class)->import($salon);
 
@@ -148,6 +201,8 @@ class DatabaseSeeder extends Seeder
             $this->bookings($salon, $sarka, $sarka->services()->orderBy('sort')->get(), $customers, perDay: [1, 3]);
             $this->bookings($salon, $tereza, $services, $customers, perDay: [1, 3]);
             $this->bookings($salon, $nails, $nailServices, $customers, perDay: [1, 2]);
+            $this->bookings($salon, $pedicure, $pedicureServices, $customers, perDay: [1, 2]);
+            $this->bookings($salon, $beauty, $beautyServices, $customers, perDay: [1, 2]);
             $this->doubleBooking($sabina, $services, $customers);
             $this->payments($salon);
 
@@ -157,7 +212,7 @@ class DatabaseSeeder extends Seeder
 
             $this->command?->newLine();
             $this->command?->info('Ukázková data jsou připravena.');
-            $this->command?->line('  Administrace:  '.url('/admin').'  (správce admin, kadeřnice sabina, sarka, tereza a nehty – heslo všude heslo123)');
+            $this->command?->line('  Administrace:  '.url('/admin').'  (správce admin; sabina, sarka, tereza, nikola, ivana, dana – heslo všude heslo123)');
             $this->command?->line('  Zákaznice:     '.url('/k/'.$token).'  (Jana Nováková)');
             $this->command?->line('  Veřejný odkaz: '.url('/s/'.$salon->slug));
         });
@@ -197,18 +252,14 @@ class DatabaseSeeder extends Seeder
     }
 
     /**
-     * Služby, které dělá jen modelace nehtů.
+     * Služby, které dělá jen jeden člen týmu (manikúra, pedikúra, kosmetika).
      *
+     * @param  list<array{string, ?string, int, int}>  $rows  název, popis, cena, délka v minutách
      * @return Collection<int, Service>
      */
-    private function nailServices(Salon $salon, User $staff, int $after)
+    private function ownServices(Salon $salon, User $staff, array $rows)
     {
-        $rows = [
-            ['Modelace nehtů – nová', 'Gelová modelace včetně úpravy nehtového lůžka.', 900, 105],
-            ['Doplnění modelace', null, 650, 80],
-            ['Gel lak', 'Manikúra a gel lak.', 450, 55],
-            ['Manikúra', null, 350, 40],
-        ];
+        $after = (int) $salon->services()->max('sort');
 
         return collect($rows)->map(function (array $row, int $i) use ($salon, $staff, $after) {
             [$name, $description, $price, $minutes] = $row;
@@ -324,6 +375,11 @@ class DatabaseSeeder extends Seeder
             return;
         }
 
+        // Kadeřnické služby = ty, které dělá aspoň jedna kadeřnice.
+        $hair = Service::query()->where('salon_id', $salon->id)
+            ->whereHas('staff', fn ($query) => $query->where('position', 'kadeřnice'))
+            ->pluck('id');
+
         $visits = Booking::query()
             ->where('salon_id', $salon->id)
             ->where('status', BookingStatus::Completed)
@@ -339,9 +395,13 @@ class DatabaseSeeder extends Seeder
             $colouring = $booking->items->contains(fn ($item) => $item->pause > 0);
             $rows = [];
 
-            // Nehty: vlastní zápis mimo katalog vlasových přípravků.
-            if ($booking->items->contains(fn ($item) => str_contains($item->name, 'nehtů') || in_array($item->name, ['Gel lak', 'Manikúra'], true))) {
-                $checkout->save($booking, [['name' => 'Gel lak', 'note' => 'odstín '.random_int(1, 40)]], $booking->total_price, PaymentMethod::Cash);
+            // Manikúra, pedikúra a kosmetika: bez vlasových přípravků z katalogu, nanejvýš vlastní zápis.
+            if ($booking->items->every(fn ($item) => ! $hair->contains($item->service_id))) {
+                $rows = $booking->items->contains(fn ($item) => str_contains(mb_strtolower($item->name), 'lak'))
+                    ? [['name' => 'Gel lak', 'note' => 'odstín '.random_int(1, 40)]]
+                    : [];
+
+                $checkout->save($booking, $rows, $booking->total_price, PaymentMethod::Cash);
                 $booking->update(['paid_at' => $booking->ends_at]);
 
                 continue;

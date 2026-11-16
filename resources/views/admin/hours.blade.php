@@ -3,7 +3,9 @@
 
 @section('title', 'Pracovní doba a volno')
 
-@php($query = $staff->is(auth()->user()) ? [] : ['kadernice' => $staff->id])
+@php
+    $query = $staff->is(auth()->user()) ? [] : ['kadernice' => $staff->id];
+@endphp
 
 @section('content')
     <a class="back-link" href="{{ route('admin.more') }}">Admin</a>
@@ -11,27 +13,56 @@
 
     @include('admin.partials.staff-switch', ['route' => 'admin.hours'])
 
-    {{-- Týdenní rozvrh --}}
+    {{-- Týdenní rozvrh: u každého dne zaškrtnutí „Zavřeno“, jinak čas od–do a případně polední pauza --}}
     <form method="post" action="{{ route('admin.hours.update', $query) }}" novalidate>
         @csrf
-        <p class="label mb-2">Dva úseky v jednom dni znamenají polední pauzu. Prázdný den = zavřeno.</p>
+        <p class="label mb-2">Dny, kdy se nepracuje, označte jako Zavřeno. Polední pauza rozdělí den na dva úseky.</p>
 
         @foreach (range(1, 7) as $weekday)
-            @php($rows = $week[$weekday] ?? collect())
-            <fieldset class="card @if ($weekday > 1) mt-2 @endif">
-                <legend class="sr-only">{{ Cz::weekdayName($weekday) }}</legend>
-                <b class="mb-2 block font-semibold" aria-hidden="true">{{ mb_convert_case(Cz::weekdayName($weekday), MB_CASE_TITLE) }}</b>
-                @foreach ([0, 1] as $i)
-                    <div class="flex items-center gap-2 @if ($i === 1) mt-2 @endif">
-                        <input class="input" type="time" name="hours[{{ $weekday }}][{{ $i }}][from]" step="300"
-                               value="{{ old("hours.$weekday.$i.from", isset($rows[$i]) ? substr($rows[$i]->starts_at, 0, 5) : '') }}"
-                               aria-label="{{ Cz::weekdayName($weekday) }}, {{ $i === 0 ? 'první' : 'druhý' }} úsek od">
+            @php
+                $rows = $week[$weekday] ?? collect();
+                $time = fn (int $i, string $key, string $column) => (string) old("hours.$weekday.$i.$key", isset($rows[$i]) ? substr($rows[$i]->{$column}, 0, 5) : '');
+                $state = [
+                    // Po neúspěšném uložení platí, co bylo odesláno; jinak je zavřeno, když den nemá žádný úsek.
+                    'closed' => old('_token') !== null ? (bool) old("closed.$weekday") : $rows->isEmpty(),
+                    'f0' => $time(0, 'from', 'starts_at'),
+                    't0' => $time(0, 'to', 'ends_at'),
+                    'f1' => $time(1, 'from', 'starts_at'),
+                    't1' => $time(1, 'to', 'ends_at'),
+                ];
+                $state['split'] = $state['f1'] !== '' || $state['t1'] !== '';
+                $dayName = Cz::weekdayName($weekday);
+            @endphp
+            <fieldset class="card @if ($weekday > 1) mt-2 @endif"
+                      x-data="{
+                          ...@js($state),
+                          reopen() { if (!this.closed && !this.f0 && !this.t0) { this.f0 = '09:00'; this.t0 = '17:00'; } },
+                          togglePause() { this.split = !this.split; if (!this.split) { this.f1 = ''; this.t1 = ''; } },
+                      }">
+                <legend class="sr-only">{{ $dayName }}</legend>
+
+                <div class="flex items-center gap-3">
+                    <b class="font-semibold" :class="{ 'text-muted': closed }" aria-hidden="true">{{ mb_convert_case($dayName, MB_CASE_TITLE) }}</b>
+                    <label class="check ml-auto">
+                        <input type="checkbox" name="closed[{{ $weekday }}]" value="1" x-model="closed" x-on:change="reopen()" aria-label="{{ $dayName }} – zavřeno">
+                        <span>Zavřeno</span>
+                    </label>
+                </div>
+
+                <div x-show="!closed" @if ($state['closed']) x-cloak @endif>
+                    <div class="mt-1 flex items-center gap-2">
+                        <input class="input" type="time" name="hours[{{ $weekday }}][0][from]" step="300" x-model="f0" aria-label="{{ $dayName }} od">
                         <span class="text-muted">–</span>
-                        <input class="input" type="time" name="hours[{{ $weekday }}][{{ $i }}][to]" step="300"
-                               value="{{ old("hours.$weekday.$i.to", isset($rows[$i]) ? substr($rows[$i]->ends_at, 0, 5) : '') }}"
-                               aria-label="{{ Cz::weekdayName($weekday) }}, {{ $i === 0 ? 'první' : 'druhý' }} úsek do">
+                        <input class="input" type="time" name="hours[{{ $weekday }}][0][to]" step="300" x-model="t0" aria-label="{{ $dayName }} do">
                     </div>
-                @endforeach
+                    <div class="mt-2 flex items-center gap-2" x-show="split" @unless ($state['split']) x-cloak @endunless>
+                        <input class="input" type="time" name="hours[{{ $weekday }}][1][from]" step="300" x-model="f1" aria-label="{{ $dayName }}, po pauze od">
+                        <span class="text-muted">–</span>
+                        <input class="input" type="time" name="hours[{{ $weekday }}][1][to]" step="300" x-model="t1" aria-label="{{ $dayName }}, po pauze do">
+                    </div>
+                    <button type="button" class="btn btn-quiet btn-sm mt-2" x-on:click="togglePause()" x-text="split ? 'Bez polední pauzy' : 'Přidat polední pauzu'">Přidat polední pauzu</button>
+                </div>
+
                 @error("hours.$weekday") <div class="field-error">{{ $message }}</div> @enderror
             </fieldset>
         @endforeach

@@ -15,7 +15,7 @@
     // Poloha času na ose; co přesahuje zobrazené hodiny (rezervace přes půlnoc), se ořízne.
     $y = fn ($time, $day) => round((max($dayStart, min($dayEnd, $time->isSameDay($day) ? $time->hour * 60 + $time->minute : ($time < $day ? 0 : 1440))) - $dayStart) * $hourHeight / 60, 1);
     // Odkazy v rozvrhu drží zvolené zobrazení a kadeřnici.
-    $keep = ['zobrazeni' => $week ? 'tyden' : null, 'kadernice' => $all ? null : $staff->id];
+    $keep = ['zobrazeni' => $week ? 'tyden' : null, 'kadernice' => $all ? null : $staff->id, 'obor' => $group];
     $link = fn (array $change = []) => route('admin.calendar', array_filter($change + $keep + ['datum' => $date->toDateString()], fn ($value) => $value !== null));
     $now = now();
     $today = $now->startOfDay();
@@ -30,9 +30,29 @@
         $column['open'] === [] => 'volno',
         default => Cz::time($column['open'][0]->start).'–'.Cz::time($column['open'][count($column['open']) - 1]->end),
     };
+    // Pod jménem v záhlaví: zaměření (když jich je v salonu víc) a pracovní doba.
+    // V hustém rozvrhu (8 a víc sloupců) zbývá místo jen na pracovní dobu; zaměření je vidět ve skupinách.
+    $headLabel = fn (array $column) => ($groups->isNotEmpty() && count($columns) < 8 && $column['staff']->positionKey() ? $column['staff']->position.' · ' : '').$hoursLabel($column);
     // Délka jako v rozvrhu kurtů: 45m, 1h, 1h30m
     $short = fn (int $minutes) => ($minutes >= 60 ? intdiv($minutes, 60).'h' : '').($minutes % 60 || $minutes < 60 ? ($minutes % 60).'m' : '');
 @endphp
+
+{{-- Den se šipkami patří do horní lišty (místo názvu salonu – ten je na ceduli v panelu). --}}
+@section('top-left')
+    <div class="top-day">
+        <a class="sched-arrow" href="{{ $link(['datum' => $back->toDateString()]) }}" aria-label="{{ $week ? 'Předchozí týden' : 'Předchozí den' }}">‹</a>
+        <div class="top-day-title">
+            <h1>{{ $title }}</h1>
+            <span>{{ $subtitle }}</span>
+        </div>
+        <a class="sched-arrow" href="{{ $link(['datum' => $step->toDateString()]) }}" aria-label="{{ $week ? 'Další týden' : 'Další den' }}">›</a>
+        <a class="chip chip-sm @if ($date->equalTo($today)) is-on @endif" href="{{ $link(['datum' => $today->toDateString()]) }}">Dnes</a>
+        <a class="chip chip-sm top-day-extra @if ($date->equalTo($today->addDay())) is-on @endif" href="{{ $link(['datum' => $today->addDay()->toDateString()]) }}">Zítra</a>
+        {{-- Týden jednoho člověka; druhé ťuknutí vrací den. --}}
+        <a class="chip chip-sm @if ($week) is-on @endif" href="{{ $week ? $link(['zobrazeni' => null]) : $link(['zobrazeni' => 'tyden', 'kadernice' => $staff->id]) }}"
+           @if ($week) aria-current="true" @endif>Týden</a>
+    </div>
+@endsection
 
 @section('content')
     <section class="sched-top" x-data="{ open: false }">
@@ -59,30 +79,34 @@
         </div>
 
         <div class="sched-head">
-            <div class="sched-day">
-                <a class="sched-arrow" href="{{ $link(['datum' => $back->toDateString()]) }}" aria-label="{{ $week ? 'Předchozí týden' : 'Předchozí den' }}">‹</a>
-                <h1>{{ $title }}</h1>
-                <a class="sched-arrow" href="{{ $link(['datum' => $step->toDateString()]) }}" aria-label="{{ $week ? 'Další týden' : 'Další den' }}">›</a>
-                <a class="chip chip-sm @if ($date->equalTo($today)) is-on @endif" href="{{ $link(['datum' => $today->toDateString()]) }}">Dnes</a>
-                <a class="chip chip-sm @if ($date->equalTo($today->addDay())) is-on @endif" href="{{ $link(['datum' => $today->addDay()->toDateString()]) }}">Zítra</a>
+            {{-- Cedule salonu: podsvícený nápis na stěně; v tmavé verzi je „zhasnuto“. --}}
+            <div class="sign" style="--sign-chars: {{ max(4, mb_strlen($salon->signTitle())) }}">
+                <span class="sign-glow sign-glow-top" aria-hidden="true"></span>
+                <span class="sign-glow sign-glow-left" aria-hidden="true"></span>
+                <span class="sign-glow sign-glow-right" aria-hidden="true"></span>
+                <b class="sign-title">{{ $salon->signTitle() }}</b>
+                @if ($salon->sign_subtitle)<span class="sign-sub">{{ $salon->sign_subtitle }}</span>@endif
             </div>
-            <p class="sched-date">{{ $subtitle }}</p>
 
-            <div class="chips justify-center" role="group" aria-label="Zobrazení">
-                <a class="chip chip-sm @if (! $week) is-on @endif" href="{{ $link(['zobrazeni' => null]) }}">Den</a>
-                <a class="chip chip-sm @if ($week) is-on @endif" href="{{ $link(['zobrazeni' => 'tyden', 'kadernice' => $staff->id]) }}">Týden</a>
+            <div class="chips justify-center" role="group" aria-label="Skupina">
+                {{-- Skupiny podle zaměření: kadeřnice, manikúra, pedikúra, kosmetika… --}}
+                @if ($groups->isNotEmpty())
+                    <a class="chip chip-sm @if (! $group && $all) is-on @endif" href="{{ $link(['obor' => null, 'kadernice' => null, 'zobrazeni' => null]) }}" @if (! $group && $all) aria-current="true" @endif>Celý salon</a>
+                    @foreach ($groups as $key => $label)
+                        <a class="chip chip-sm @if ($group === $key && $all) is-on @endif" href="{{ $link(['obor' => $key, 'kadernice' => null, 'zobrazeni' => null]) }}"
+                           @if ($group === $key && $all) aria-current="true" @endif>{{ mb_convert_case(mb_substr($label, 0, 1), MB_CASE_UPPER).mb_substr($label, 1) }}</a>
+                    @endforeach
+                @elseif ($staffList->count() > 1)
+                    <a class="chip chip-sm @if ($all) is-on @endif" href="{{ $link(['kadernice' => null, 'zobrazeni' => null]) }}" @if ($all) aria-current="true" @endif>Celý salon</a>
+                @endif
+
+                {{-- Vybraný jeden člověk (kliknutím na jméno ve sloupci): ťuknutím se výběr zruší. --}}
+                @if (! $all && $staffList->count() > 1)
+                    <a class="chip chip-sm is-on" href="{{ $link(['kadernice' => null, 'zobrazeni' => null]) }}" aria-label="{{ $staff->name }} – zrušit výběr">{{ $staff->name }} ×</a>
+                @endif
+
                 <button type="button" class="chip chip-sm mini-cal-toggle" x-on:click="open = !open" :aria-expanded="open">Kalendář</button>
             </div>
-
-            @if ($staffList->count() > 1)
-                <div class="chips justify-center" role="group" aria-label="Kadeřnice">
-                    <a class="chip chip-sm @if ($all) is-on @endif" href="{{ $link(['kadernice' => null, 'zobrazeni' => null]) }}" @if ($all) aria-current="true" @endif>Všechny</a>
-                    @foreach ($staffList as $member)
-                        <a class="chip chip-sm @if (! $all && $member->is($staff)) is-on @endif" href="{{ $link(['kadernice' => $member->id]) }}"
-                           @if (! $all && $member->is($staff)) aria-current="true" @endif>{{ $member->name }}</a>
-                    @endforeach
-                </div>
-            @endif
         </div>
     </section>
 
@@ -99,7 +123,7 @@
              'snap' => $slotStep,
              'moveUrl' => route('admin.bookings.drop', ['booking' => '__ID__']),
          ]))">
-        <div class="cal @if ($week) cal-week @endif" style="--cal-cols: {{ count($columns) }}; --cal-half: {{ $half }}px" x-ref="board">
+        <div class="cal @if ($week) cal-week @elseif (count($columns) >= 8) cal-dense @endif" style="--cal-cols: {{ count($columns) }}; --cal-half: {{ $half }}px" x-ref="board">
             {{-- Záhlaví sloupců: v týdnu dny, ve dni kadeřnice s pracovní dobou --}}
             <div class="cal-corner">Čas</div>
             @foreach ($columns as $column)
@@ -111,10 +135,11 @@
                 @else
                     <div class="cal-staff">
                         <span class="cal-staff-dot" style="background: {{ $column['staff']->color }}" aria-hidden="true"></span>
-                        <span class="cal-staff-name">
+                        {{-- Jméno vede na rozvrh jen tohoto člověka (den, odtud i týden). --}}
+                        <a class="cal-staff-name" href="{{ $link(['kadernice' => $column['staff']->id]) }}" aria-label="{{ $column['staff']->name }} – jen její rozvrh">
                             <b>{{ $column['staff']->name }}</b>
-                            <span>{{ $hoursLabel($column) }}</span>
-                        </span>
+                            <span>{{ $headLabel($column) }}</span>
+                        </a>
                         <a class="cal-add" href="{{ route('admin.bookings.create', ['datum' => $column['date']->toDateString(), 'kadernice' => $column['staff']->id]) }}"
                            aria-label="Nová rezervace – {{ $column['staff']->name }}">@include('partials.icon', ['name' => 'plus', 'size' => 20])</a>
                     </div>

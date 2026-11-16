@@ -3,11 +3,11 @@
 
 @php($isNew = ! $member->exists)
 
-@section('title', $isNew ? 'Nová kadeřnice' : $member->name)
+@section('title', $isNew ? 'Nový člen týmu' : $member->name)
 
 @section('content')
-    <a class="back-link" href="{{ route('admin.staff.index') }}">Kadeřnice</a>
-    <h1 class="screen-title">{{ $isNew ? 'Nová kadeřnice' : $member->name }}</h1>
+    <a class="back-link" href="{{ route('admin.staff.index') }}">Tým</a>
+    <h1 class="screen-title">{{ $isNew ? 'Nový člen týmu' : $member->name }}</h1>
 
     <form method="post" action="{{ $isNew ? route('admin.staff.store') : route('admin.staff.update', $member) }}" novalidate autocomplete="off">
         @csrf
@@ -18,9 +18,18 @@
             @error('name') <div class="field-error">{{ $message }}</div> @enderror
         </label>
 
+        <label class="field">
+            <span>Zaměření (nepovinné) – podle něj se rozvrh dělí na skupiny</span>
+            <input class="input" type="text" name="position" value="{{ old('position', $member->position) }}" maxlength="40" list="zamereni" placeholder="kadeřnice, manikúra, pedikúra, kosmetika…" autocapitalize="none">
+            <datalist id="zamereni">
+                @foreach ($positions as $position)<option value="{{ $position }}">@endforeach
+            </datalist>
+            @error('position') <div class="field-error">{{ $message }}</div> @enderror
+        </label>
+
         <label class="check">
             <input type="checkbox" name="is_bookable" value="1" @checked(old('is_bookable', $member->is_bookable))>
-            <span>Má vlastní sloupec v rozvrhu a zákaznice se k ní mohou objednat</span>
+            <span>Má vlastní sloupec v rozvrhu a zákaznice se mohou objednat</span>
         </label>
 
         <label class="field mt-2">
@@ -50,13 +59,13 @@
         <label class="field">
             <span>Oprávnění</span>
             <select class="input" name="role">
-                <option value="{{ UserRole::Staff->value }}" @selected(old('role', $member->role?->value) === UserRole::Staff->value)>Kadeřnice – rozvrh, zákaznice a své nastavení</option>
-                <option value="{{ UserRole::Owner->value }}" @selected(old('role', $member->role?->value) === UserRole::Owner->value)>Správce salonu – navíc ceník, kadeřnice a nastavení</option>
+                <option value="{{ UserRole::Staff->value }}" @selected(old('role', $member->role?->value) === UserRole::Staff->value)>Člen týmu – rozvrh, zákaznice, svůj ceník a pracovní doba</option>
+                <option value="{{ UserRole::Owner->value }}" @selected(old('role', $member->role?->value) === UserRole::Owner->value)>Správce salonu – navíc tým, společné služby a nastavení salonu</option>
             </select>
             @error('role') <div class="field-error">{{ $message }}</div> @enderror
         </label>
 
-        <button class="btn btn-primary btn-block mt-3" type="submit">{{ $isNew ? 'Přidat kadeřnici' : 'Uložit' }}</button>
+        <button class="btn btn-primary btn-block mt-3" type="submit">{{ $isNew ? 'Přidat do týmu' : 'Uložit' }}</button>
     </form>
 
     @unless ($isNew)
