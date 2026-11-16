@@ -6,7 +6,9 @@ use App\Enums\BookingStatus;
 use App\Models\NotificationLog;
 use App\Notifications\BookingNotification;
 use App\Services\Booking\BookingManager;
-use App\Support\Ics;
+use Illuminate\Notifications\Events\NotificationFailed;
+use Illuminate\Notifications\Events\NotificationSent;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 
@@ -15,7 +17,7 @@ beforeEach(function () {
     [$this->salon, $this->petra] = salonWithStaff();
     $this->petra->update(['name' => 'Petra']);
     $this->cut = service($this->salon);
-    $this->jana = customer($this->salon, ['name' => 'Jana Nováková', 'email' => 'jana@example.com']);
+    $this->jana = customer($this->salon, ['name' => 'Jana Nováková']);
     $this->manager = app(BookingManager::class);
 });
 
@@ -31,11 +33,20 @@ function notSentTo($notifiable, ?BookingNotice $notice = null): void
 
 function subscribe($notifiable): void
 {
-    $notifiable->updatePushSubscription('https://push.example.com/'.uniqid(), 'klic', 'tajemstvi', 'aes128gcm');
+    static $device = 0;
+
+    // Každé zařízení má vlastní adresu (uniqid() se na Windows při rychlém volání opakuje).
+    $notifiable->updatePushSubscription('https://push.example.com/zarizeni-'.(++$device), 'klic', 'tajemstvi', 'aes128gcm');
 }
 
 describe('kdo se o čem dozví', function () {
-    beforeEach(fn () => Notification::fake());
+    beforeEach(function () {
+        Notification::fake();
+
+        // Upozornění chodí jen na telefon – zákaznice i kadeřnice je mají zapnutá.
+        subscribe($this->jana);
+        subscribe($this->petra);
+    });
 
     test('nová potvrzená rezervace: zákaznice i kadeřnice', function () {
         $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->petra);
@@ -102,7 +113,7 @@ describe('kdo se o čem dozví', function () {
     });
 });
 
-describe('kanál: push, e-mail jen jako záloha', function () {
+describe('kanál: jen push, žádné e-maily ani SMS', function () {
     beforeEach(function () {
         Notification::fake();
         $this->booking = $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->petra);
@@ -115,24 +126,23 @@ describe('kanál: push, e-mail jen jako záloha', function () {
         expect(($this->via)($this->jana->fresh()))->toBe([WebPushChannel::class]);
     });
 
-    test('bez push odběru se použije e-mail', function () {
-        expect(($this->via)($this->jana))->toBe(['mail']);
+    test('bez push odběru se neposílá nic – zákaznici ani kadeřnici', function () {
+        expect(($this->via)($this->jana))->toBe([])
+            ->and(($this->via)($this->petra, BookingNotice::NewBooking))->toBe([])
+            ->and($this->jana->reachableByPush())->toBeFalse();
     });
 
-    test('bez push odběru i bez e-mailu se neposílá nic (žádné SMS)', function () {
-        $this->jana->update(['email' => null]);
-
-        expect(($this->via)($this->jana))->toBe([]);
-    });
-
-    test('vypnutá upozornění: připomínka se neposílá, důležitá změna jde e-mailem', function () {
+    test('vypnutá upozornění: neposílá se nic, ani když má zařízení přihlášené', function () {
         subscribe($this->jana);
+        expect($this->jana->fresh()->reachableByPush())->toBeTrue();
+
         $this->jana->update(['notifications_enabled' => false]);
 
         expect(($this->via)($this->jana, BookingNotice::Reminder))->toBe([])
             ->and(($this->via)($this->jana, BookingNotice::Confirmed))->toBe([])
-            ->and(($this->via)($this->jana, BookingNotice::CancelledByStaff))->toBe(['mail'])
-            ->and(($this->via)($this->jana, BookingNotice::MovedByStaff))->toBe(['mail']);
+            ->and(($this->via)($this->jana, BookingNotice::CancelledByStaff))->toBe([])
+            ->and(($this->via)($this->jana, BookingNotice::MovedByStaff))->toBe([])
+            ->and($this->jana->reachableByPush())->toBeFalse();
     });
 });
 
@@ -173,51 +183,54 @@ describe('texty upozornění', function () {
         expect($forCustomer['title'])->toBe('Termín potvrzen')
             ->and($forCustomer['data'])->toBe(['path' => "/terminy/{$this->booking->id}"])
             ->and($forStaff['data'])->toBe(['url' => "/admin/rezervace/{$this->booking->id}"])
+            // Ikony bez lomítka na začátku: service worker je doplní i při běhu v podsložce.
+            ->and($forCustomer['icon'])->toBe('icons/icon-192.png')
+            ->and($forCustomer['badge'])->toBe('icons/badge-96.png')
             ->and(json_encode($forCustomer))->not->toContain('/k/');
     });
 });
 
-describe('e-mailová záloha', function () {
-    test('potvrzení e-mailem má přílohu do kalendáře a zapíše se do záznamu', function () {
+describe('bez push odběru a záznam upozornění', function () {
+    test('rezervace i její zrušení proběhnou bez jediného e-mailu', function () {
+        Mail::fake();
+
+        // Skutečné odeslání (fronta běží v testu hned): nikdo nemá push odběr → neodejde nic.
         $booking = $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->petra);
+        $this->manager->cancelByStaff($booking, 'Nemoc');
 
-        $mail = (new BookingNotification($booking, BookingNotice::Confirmed))->toMail($this->jana);
-
-        expect($mail->subject)->toBe('Termín potvrzen – '.$this->salon->name)
-            ->and($mail->rawAttachments[0]['name'])->toBe('rezervace.ics')
-            ->and($mail->rawAttachments[0]['data'])->toContain('BEGIN:VEVENT', 'DTSTART:20261111T090000Z');   // 10:00 SEČ = 9:00 UTC
-
-        // Při vytvoření rezervace se e-maily opravdu odeslaly (fronta běží v testu hned).
-        $log = NotificationLog::orderBy('id')->get();
-
-        expect($log->pluck('type')->all())->toEqualCanonicalizing(['confirmed', 'new_booking'])
-            ->and($log->pluck('channel')->unique()->all())->toBe(['mail'])
-            ->and($log->first()->sent_at)->not->toBeNull()
-            ->and($log->first()->booking_id)->toBe($booking->id);
+        Mail::assertNothingOutgoing();
+        expect(NotificationLog::count())->toBe(0);
     });
 
-    test('zrušení přílohu nemá, e-mail kadeřnici vede do administrace', function () {
+    test('odeslané upozornění se zapíše do záznamu', function () {
         $booking = $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->petra);
 
-        $cancelled = (new BookingNotification($booking, BookingNotice::CancelledByStaff))->toMail($this->jana);
-        $forStaff = (new BookingNotification($booking, BookingNotice::NewBooking))->toMail($this->petra);
+        event(new NotificationSent($this->jana, new BookingNotification($booking, BookingNotice::Confirmed), WebPushChannel::class));
 
-        expect($cancelled->rawAttachments)->toBe([])
-            ->and($forStaff->actionUrl)->toEndWith("/admin/rezervace/{$booking->id}");
+        expect(NotificationLog::sole())
+            ->type->toBe('confirmed')
+            ->channel->toBe('push')
+            ->booking_id->toBe($booking->id)
+            ->sent_at->not->toBeNull()
+            ->error->toBeNull();
     });
 
-    test('událost do kalendáře obsahuje službu, salon a místo', function () {
+    test('nepovedené odeslání se zapíše s chybou', function () {
         $booking = $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->petra);
-        $ics = Ics::forBooking($booking->load('items', 'staff', 'salon'));
 
-        expect($ics)->toContain("UID:rezervace-{$booking->id}@", 'DTEND:20261111T094500Z', 'SUMMARY:Dámský střih – ', 'END:VCALENDAR')
-            ->and(str_contains($ics, "\r\n"))->toBeTrue();
+        event(new NotificationFailed($this->petra, new BookingNotification($booking, BookingNotice::NewBooking), WebPushChannel::class, ['message' => 'Odběr už neplatí']));
+
+        expect(NotificationLog::sole())
+            ->type->toBe('new_booking')
+            ->sent_at->toBeNull()
+            ->error->toBe('Odběr už neplatí');
     });
 });
 
 describe('připomínky', function () {
     beforeEach(function () {
         Notification::fake();
+        subscribe($this->jana);
         // Středa 11. 11. v 10:00 → připomínka 48 h předem = pondělí 9. 11. v 10:00.
         $this->booking = $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->petra);
     });
@@ -245,6 +258,7 @@ describe('připomínky', function () {
 
     test('čekající ani zrušené rezervace se nepřipomínají', function () {
         $pending = $this->manager->create(customer($this->salon), [$this->cut], at('13:00'), $this->petra, BookingStatus::Pending);
+        subscribe($pending->customer);
         $this->manager->cancelByStaff($this->booking);
 
         $this->travelTo('2026-11-09 10:01:00');
@@ -290,7 +304,8 @@ describe('aplikace na plochu a push odběry', function () {
         $this->get(k($token, '/manifest.webmanifest'))
             ->assertOk()
             ->assertHeader('Content-Type', 'application/manifest+json')
-            ->assertJsonPath('start_url', "/k/{$token}")
+            ->assertJsonPath('start_url', url("/k/{$token}"))
+            ->assertJsonPath('scope', url('/').'/')
             ->assertJsonPath('display', 'standalone')
             ->assertJsonPath('name', $this->salon->name)
             ->assertJsonCount(3, 'icons');
@@ -299,7 +314,7 @@ describe('aplikace na plochu a push odběry', function () {
     });
 
     test('manifest administrace začíná v administraci a jde stáhnout bez přihlášení', function () {
-        $this->get('/admin/manifest.webmanifest')->assertOk()->assertJsonPath('start_url', '/admin');
+        $this->get('/admin/manifest.webmanifest')->assertOk()->assertJsonPath('start_url', url('/admin'));
     });
 
     test('ikony, service worker a offline stránka existují', function () {

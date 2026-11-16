@@ -18,10 +18,11 @@ class SendReminders extends Command
 {
     protected $signature = 'bookings:send-reminders';
 
-    protected $description = 'Pošle připomínky termínů (push, případně e-mail)';
+    protected $description = 'Pošle připomínky termínů (push upozornění)';
 
     /**
-     * Šířka okna v minutách. Úloha běží po 5 minutách; okno je dvojnásobné, aby
+     * Nejmenší šířka okna v minutách (jde prodloužit v config/luxio.php, když se úloha
+     * spouští řidčeji). Úloha běží po 5 minutách; okno je dvojnásobné, aby
      * jedno zpožděné spuštění připomínku nevynechalo. Dvakrát se nepošle –
      * hlídá to `reminder_sent_at`.
      */
@@ -54,7 +55,7 @@ class SendReminders extends Command
             ->where('salon_id', $salon->id)
             ->where('status', BookingStatus::Confirmed)
             ->whereNull($column)
-            ->where('starts_at', '>', $until->subMinutes(self::WINDOW_MINUTES))
+            ->where('starts_at', '>', $until->subMinutes(max(self::WINDOW_MINUTES, (int) config('luxio.reminder_window_minutes'))))
             ->where('starts_at', '<=', $until)
             ->with('customer', 'staff', 'items', 'salon')
             ->get();

@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * Ochrana veřejného rezervačního formuláře proti robotům.
  *
- * Formulář po odeslání posílá e-mail na zadanou adresu a zabírá místo v kalendáři,
+ * Formulář po odeslání zakládá zákaznici a zabírá místo v kalendáři,
  * proto nestačí kontrola, která jde obejít vynecháním pole:
  *  - šifrované časové razítko vydané serverem (bez něj formulář neprojde),
  *  - minimální doba vyplnění a omezená platnost razítka,

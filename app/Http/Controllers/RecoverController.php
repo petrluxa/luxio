@@ -2,65 +2,29 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Customer;
-use App\Models\CustomerAccessToken;
-use App\Services\Customers\AccessLinks;
+use App\Models\Salon;
 use App\Support\CustomerCookie;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
- * Ztracený odkaz: zákaznice zadá e-mail a dostane dočasný podepsaný odkaz (30 min).
- * Po jeho otevření a potvrzení vznikne nový token; staré tokeny zůstávají platné.
+ * Ztracený odkaz. Aplikace neposílá e-maily ani SMS, nový odkaz proto zákaznici
+ * pošle kadeřnice (karta zákaznice → Poslat odkaz). Tady se jen dozví, na koho se obrátit.
  */
 class RecoverController extends Controller
 {
-    public function create(): View
+    public function __invoke(Request $request): View|RedirectResponse
     {
-        return view('recover.create');
-    }
-
-    public function store(Request $request, AccessLinks $links): RedirectResponse
-    {
-        $data = $request->validate(['email' => ['required', 'string', 'email']]);
-
-        Customer::where('email', Str::lower(trim($data['email'])))
-            ->where('is_blocked', false)
-            ->get()
-            // Nejvýš 3 e-maily za hodinu na zákaznici – nikdo jí tak nezahltí schránku.
-            ->filter(fn (Customer $customer) => RateLimiter::attempt('obnova:'.$customer->id, 3, fn () => true, 3600))
-            ->each(fn (Customer $customer) => $links->sendClaim($customer, 'recover'));
-
-        // Stejná odpověď, ať už e-mail známe, nebo ne.
-        return back()->with('status', 'Pokud tento e-mail známe, poslali jsme na něj nový odkaz. Platí 30 minut.');
-    }
-
-    /** Mezikrok: token nevzniká už při otevření odkazu (e-mailové programy odkazy samy načítají). */
-    public function show(Request $request, Customer $customer): View
-    {
-        return view('recover.claim', [
-            'customer' => $customer,
-            'salon' => $customer->salon,
-            'appTitle' => $customer->salon->name,
-            'action' => $request->fullUrl(),
-        ]);
-    }
-
-    public function claim(Customer $customer): RedirectResponse
-    {
-        abort_if($customer->is_blocked, 403);
-
-        if (! $customer->email_verified_at) {
-            $customer->forceFill(['email_verified_at' => now()])->save();
+        // V tomto prohlížeči odkaz pořád je (uložili jsme ho při první návštěvě).
+        if ($token = CustomerCookie::token($request)) {
+            return redirect()->route('customer.home', ['token' => $token]);
         }
 
-        $token = CustomerAccessToken::issue($customer);
+        $salon = $request->filled('salon')
+            ? Salon::where('slug', (string) $request->query('salon'))->first()
+            : null;
 
-        return redirect()
-            ->route('customer.home', ['token' => $token])
-            ->withCookie(CustomerCookie::make($token));
+        return view('recover', ['salon' => $salon, 'appTitle' => $salon?->name]);
     }
 }

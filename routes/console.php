@@ -16,7 +16,7 @@ Schedule::command('bookings:send-reminders')->everyFiveMinutes()->withoutOverlap
 // Skončené termíny označit jako proběhlé.
 Schedule::command('bookings:complete-past')->hourly();
 
-// Fronta (push a e-maily). Na hostingu bez trvale běžícího procesu ji každou minutu
+// Fronta (push upozornění). Na hostingu bez trvale běžícího procesu ji každou minutu
 // vyřídí plánovač; kde běží `queue:work` pod supervizorem, stačí tento řádek vypnout
 // nastavením QUEUE_VIA_SCHEDULER=false.
 if (config('luxio.queue_via_scheduler')) {

@@ -1,6 +1,7 @@
 import Alpine from 'alpinejs';
 import bookingWizard from './booking-wizard';
 import pushSetup from './push';
+import { registerWorker } from './worker';
 
 window.Alpine = Alpine;
 
@@ -14,7 +15,7 @@ Alpine.start();
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            await navigator.serviceWorker.register('/sw.js');
+            await registerWorker();
 
             const base = document.documentElement.dataset.base;
 

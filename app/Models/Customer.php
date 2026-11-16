@@ -14,7 +14,7 @@ class Customer extends Model
     use HasFactory, HasPushSubscriptions, Notifiable;
 
     protected $fillable = [
-        'salon_id', 'name', 'phone', 'email', 'email_verified_at', 'preferred_staff_id',
+        'salon_id', 'name', 'phone', 'preferred_staff_id',
         'note', 'color_recipe', 'is_blocked', 'is_verified', 'notifications_enabled', 'consent_at',
     ];
 
@@ -28,7 +28,6 @@ class Customer extends Model
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
             'consent_at' => 'datetime',
             'is_blocked' => 'boolean',
             'is_verified' => 'boolean',
@@ -54,6 +53,15 @@ class Customer extends Model
     public function bookings(): HasMany
     {
         return $this->hasMany(Booking::class);
+    }
+
+    /**
+     * Dostane upozornění na telefon? Jinak se o změně termínu sama nedozví
+     * (aplikace neposílá e-maily ani SMS) a musí jí dát vědět kadeřnice.
+     */
+    public function reachableByPush(): bool
+    {
+        return $this->notifications_enabled && $this->pushSubscriptions()->exists();
     }
 
     /** Křestní jméno pro oslovení v notifikacích. */

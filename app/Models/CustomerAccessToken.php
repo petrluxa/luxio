@@ -8,7 +8,7 @@ use Illuminate\Support\Str;
 
 /**
  * Osobní odkaz zákaznice `/k/{token}`. V databázi je jen SHA-256 hash,
- * čitelný token existuje pouze ve chvíli vydání (odkaz v e-mailu / sdílení).
+ * čitelný token existuje pouze ve chvíli vydání (prohlížeč nové zákaznice / sdílení kadeřnicí).
  */
 class CustomerAccessToken extends Model
 {

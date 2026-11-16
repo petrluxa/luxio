@@ -12,12 +12,6 @@
     @error('phone') <div class="field-error">{{ $message }}</div> @enderror
 </label>
 
-<label class="field">
-    <span>E-mail</span>
-    <input class="input" type="email" name="email" value="{{ old('email', $customer?->email) }}" inputmode="email" autocomplete="off" maxlength="190">
-    @error('email') <div class="field-error">{{ $message }}</div> @enderror
-</label>
-
 @if ($staffList->count() > 1)
     <label class="field">
         <span>Chodí ke kadeřnici</span>

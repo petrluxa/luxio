@@ -17,7 +17,6 @@ class CustomerFactory extends Factory
             'salon_id' => Salon::factory(),
             'name' => fake()->firstNameFemale().' '.fake()->lastNameFemale(),
             'phone' => '+420'.fake()->unique()->numerify('60#######'),
-            'email' => fake()->unique()->safeEmail(),
             'is_verified' => true,
             'consent_at' => now(),
         ];

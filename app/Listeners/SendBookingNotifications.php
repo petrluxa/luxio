@@ -14,6 +14,7 @@ use App\Models\Booking;
 use App\Notifications\BookingNotification;
 use Carbon\CarbonImmutable;
 use Illuminate\Events\Dispatcher;
+use Throwable;
 
 /**
  * Kdo se o čem dozví (SPEC 6):
@@ -92,11 +93,24 @@ class SendBookingNotifications
 
     private function toCustomer(Booking $booking, BookingNotice $notice, ?CarbonImmutable $previousStart = null): void
     {
-        $booking->customer->notify(new BookingNotification($booking, $notice, $previousStart));
+        $this->send($booking->customer, new BookingNotification($booking, $notice, $previousStart));
     }
 
     private function toStaff(Booking $booking, BookingNotice $notice, ?CarbonImmutable $previousStart = null): void
     {
-        $booking->staff->notify(new BookingNotification($booking, $notice, $previousStart));
+        $this->send($booking->staff, new BookingNotification($booking, $notice, $previousStart));
+    }
+
+    /**
+     * Upozornění je doplněk: když se ho nepodaří odeslat (nebo zařadit do fronty),
+     * rezervace – která už je uložená – kvůli tomu nesmí skončit chybou.
+     */
+    private function send(object $notifiable, BookingNotification $notification): void
+    {
+        try {
+            $notifiable->notify($notification);
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 }

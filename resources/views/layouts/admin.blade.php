@@ -23,7 +23,7 @@
             ] as $key => [$route, $label])
                 @continue(! Route::has($route))
                 <a href="{{ route($route) }}"
-                   @class(['relative flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-[12px]', 'font-semibold text-primary' => $tab === $key, 'text-muted' => $tab !== $key])
+                   @class(['relative flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-[12px]', 'font-semibold text-link' => $tab === $key, 'text-muted' => $tab !== $key])
                    @if ($tab === $key) aria-current="page" @endif>
                     @include('partials.icon', ['name' => $key])
                     <span>{{ $label }}</span>

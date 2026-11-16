@@ -18,7 +18,7 @@ Route::get('/ke-schvaleni', [BookingController::class, 'pending'])->name('pendin
 // Rezervace
 Route::prefix('rezervace')->name('bookings.')->group(function () {
     Route::get('/nova', [BookingController::class, 'create'])->name('create');
-    Route::get('/terminy', [BookingController::class, 'slots'])->name('slots');
+    Route::get('/terminy', [BookingController::class, 'slots'])->middleware('background')->name('slots');
     Route::post('/', [BookingController::class, 'store'])->name('store');
 
     Route::get('/{booking}', [BookingController::class, 'show'])->whereNumber('booking')->name('show');
@@ -35,7 +35,7 @@ Route::prefix('rezervace')->name('bookings.')->group(function () {
 // Zákaznice
 Route::prefix('zakaznice')->name('customers.')->group(function () {
     Route::get('/', [CustomerController::class, 'index'])->name('index');
-    Route::get('/hledat', [CustomerController::class, 'lookup'])->name('lookup');
+    Route::get('/hledat', [CustomerController::class, 'lookup'])->middleware('background')->name('lookup');
     Route::get('/nova', [CustomerController::class, 'create'])->name('create');
     Route::post('/', [CustomerController::class, 'store'])->name('store');
     Route::get('/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->name('show');

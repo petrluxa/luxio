@@ -1,7 +1,7 @@
 <?php
 
+use App\Enums\BookingSource;
 use App\Enums\BookingStatus;
-use App\Mail\AccessLinkMail;
 use App\Models\Booking;
 use App\Models\Customer;
 use App\Models\CustomerAccessToken;
@@ -9,7 +9,6 @@ use App\Services\Security\PublicFormGuard;
 use App\Support\CustomerCookie;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\URL;
 
 beforeEach(function () {
     $this->travelTo(TEST_NOW);
@@ -17,6 +16,9 @@ beforeEach(function () {
     [$this->salon, $this->staff] = salonWithStaff();
     $this->cut = service($this->salon);
 });
+
+// Aplikace e-maily vůbec neposílá – ať se v těchto testech stane cokoliv.
+afterEach(fn () => Mail::assertNothingOutgoing());
 
 function firstBooking($test, array $overrides = []): array
 {
@@ -26,19 +28,19 @@ function firstBooking($test, array $overrides = []): array
         'time' => '10:00',
         'name' => 'Jana Nováková',
         'phone' => '603 123 456',
-        'email' => 'Jana@Example.com',
         'consent' => '1',
         PublicFormGuard::FIELD => Crypt::encryptString((string) now()->subSeconds(30)->getTimestamp()),
     ];
 }
 
-test('veřejný odkaz salonu ukáže průvodce s kontaktními údaji', function () {
+test('veřejný odkaz salonu ukáže průvodce s kontaktními údaji bez e-mailu', function () {
     $this->get('/s/'.$this->salon->slug)
         ->assertOk()
         ->assertSee($this->salon->name)
         ->assertViewHas('wizard', fn (array $wizard) => $wizard['services'][0]['name'] === 'Dámský střih')
         ->assertSee('Vaše údaje')
-        ->assertSee('Souhlasím se zpracováním');
+        ->assertSee('Souhlasím se zpracováním jména a telefonu')
+        ->assertDontSee('name="email"', false);
 });
 
 test('nabídka termínů je dostupná i bez účtu', function () {
@@ -56,10 +58,10 @@ test('první rezervace založí zákaznici, token a čeká na schválení', func
     expect($jana)
         ->name->toBe('Jana Nováková')
         ->phone->toBe('+420603123456')
-        ->email->toBe('jana@example.com')
         ->is_verified->toBeFalse()
         ->consent_at->not->toBeNull()
         ->and($booking->status)->toBe(BookingStatus::Pending)
+        ->and($booking->source)->toBe(BookingSource::Online)
         ->and($booking->customer_id)->toBe($jana->id)
         ->and(CustomerAccessToken::count())->toBe(1);
 
@@ -72,13 +74,12 @@ test('první rezervace založí zákaznici, token a čeká na schválení', func
 
     $response->assertCookie(CustomerCookie::NAME, $m[1]);
 
-    $this->get($location)->assertOk()->assertSee('Rezervace je odeslaná')->assertSee('Uložte si aplikaci na plochu');
-
-    // Jeden e-mail s osobním odkazem, aby ho zákaznice neztratila.
-    Mail::assertQueued(AccessLinkMail::class, fn (AccessLinkMail $mail) => $mail->hasTo('jana@example.com')
-        && $mail->reason === 'welcome'
-        && str_contains($mail->url, $m[1]));
-    Mail::assertQueuedCount(1);
+    // Odkaz e-mailem neposíláme – zákaznice si ho uloží na plochu nebo zkopíruje.
+    $this->get($location)->assertOk()
+        ->assertSee('Rezervace je odeslaná')
+        ->assertSee('Uložte si aplikaci na plochu')
+        ->assertSee('Váš osobní odkaz')
+        ->assertSee(k($m[1]));
 });
 
 test('salon může schvalování nových zákaznic vypnout', function () {
@@ -89,31 +90,38 @@ test('salon může schvalování nových zákaznic vypnout', function () {
     expect(Booking::sole()->status)->toBe(BookingStatus::Confirmed);
 });
 
-describe('známý e-mail nebo telefon (ochrana proti převzetí cizího účtu)', function () {
+describe('známý telefon (ochrana proti převzetí cizího účtu)', function () {
     beforeEach(function () {
-        $this->known = customer($this->salon, ['name' => 'Jana Nováková', 'email' => 'jana@example.com', 'phone' => '+420603123456']);
+        $this->known = customer($this->salon, ['name' => 'Jana Nováková', 'phone' => '+420603123456']);
     });
 
     test('nová zákaznice se nezaloží, rezervace čeká a prohlížeč nedostane token', function () {
-        $response = $this->post('/s/'.$this->salon->slug, firstBooking($this));
+        $response = $this->post('/s/'.$this->salon->slug, firstBooking($this, ['name' => 'Někdo Jiný']));
 
         $response->assertRedirect("/s/{$this->salon->slug}/odeslano")->assertCookieMissing(CustomerCookie::NAME);
 
         expect(Customer::count())->toBe(1)
+            ->and($this->known->fresh()->name)->toBe('Jana Nováková')         // jméno z formuláře kartu nepřepíše
             ->and(Booking::sole()->customer_id)->toBe($this->known->id)
-            ->and(Booking::sole()->status)->toBe(BookingStatus::Pending)   // i když je zákaznice ověřená
+            ->and(Booking::sole()->status)->toBe(BookingStatus::Pending)       // i když je zákaznice ověřená
+            ->and(Booking::sole()->source)->toBe(BookingSource::SalonLink)
             ->and(CustomerAccessToken::count())->toBe(0);
 
-        $this->get("/s/{$this->salon->slug}/odeslano")->assertOk()->assertSee('Čeká na potvrzení');
+        $this->get("/s/{$this->salon->slug}/odeslano")->assertOk()
+            ->assertSee('Čeká na potvrzení')
+            ->assertSee('pošle vám váš osobní odkaz');
     });
 
-    test('odkaz odejde na uložený e-mail, ne na ten z formuláře', function () {
-        $this->post('/s/'.$this->salon->slug, firstBooking($this, ['email' => 'utocnik@example.com']));
+    test('kadeřnice u takové rezervace vidí, že má zákaznici poslat odkaz', function () {
+        $this->post('/s/'.$this->salon->slug, firstBooking($this));
 
-        Mail::assertQueued(AccessLinkMail::class, fn (AccessLinkMail $mail) => $mail->hasTo('jana@example.com') && $mail->reason === 'existing');
-        Mail::assertNotQueued(AccessLinkMail::class, fn (AccessLinkMail $mail) => $mail->hasTo('utocnik@example.com'));
+        $this->actingAs($this->staff)->get('/admin/ke-schvaleni')->assertOk()
+            ->assertSee('Přišla přes veřejný odkaz salonu')
+            ->assertSee('/admin/zakaznice/'.$this->known->id);
 
-        expect(Customer::count())->toBe(1);
+        $this->actingAs($this->staff)->get('/admin/rezervace/'.Booking::sole()->id)->assertOk()
+            ->assertSee('zákaznice u sebe nemá osobní odkaz')
+            ->assertSee('přes veřejný odkaz salonu');
     });
 
     test('zablokovaná zákaznice rezervaci nevytvoří, odpověď je ale stejná', function () {
@@ -122,13 +130,12 @@ describe('známý e-mail nebo telefon (ochrana proti převzetí cizího účtu)'
         $this->post('/s/'.$this->salon->slug, firstBooking($this))->assertRedirect("/s/{$this->salon->slug}/odeslano");
 
         expect(Booking::count())->toBe(0);
-        Mail::assertNothingQueued();
     });
 });
 
-test('všechny údaje i souhlas jsou povinné', function () {
-    $this->post('/s/'.$this->salon->slug, firstBooking($this, ['name' => '', 'phone' => '123', 'email' => 'neplatny', 'consent' => null]))
-        ->assertSessionHasErrors(['name', 'phone', 'email', 'consent']);
+test('jméno, telefon i souhlas jsou povinné', function () {
+    $this->post('/s/'.$this->salon->slug, firstBooking($this, ['name' => '', 'phone' => '123', 'consent' => null]))
+        ->assertSessionHasErrors(['name', 'phone', 'consent']);
 
     expect(Customer::count())->toBe(0)->and(Booking::count())->toBe(0);
 });
@@ -156,44 +163,30 @@ test('stálá zákaznice s cookie jde z veřejného odkazu rovnou do svého úč
 });
 
 describe('ztracený odkaz', function () {
-    test('na známý e-mail odejde dočasný odkaz, odpověď je vždy stejná', function () {
-        $jana = customer($this->salon, ['email' => 'jana@example.com']);
+    test('stránka odkáže na kadeřnici a nic neposílá ani nevydává', function () {
+        $this->salon->update(['phone' => '+420603123456']);
+        customer($this->salon);
 
-        $this->post('/obnovit', ['email' => 'JANA@example.com'])->assertSessionHas('status');
-        $this->post('/obnovit', ['email' => 'nikdo@example.com'])->assertSessionHas('status');
+        $this->get('/obnovit?salon='.$this->salon->slug)->assertOk()
+            ->assertSee('Nový odkaz do rezervací vám pošle vaše kadeřnice')
+            ->assertSee('tel:+420603123456', false)
+            ->assertDontSee('<form', false);
 
-        Mail::assertQueued(AccessLinkMail::class, fn (AccessLinkMail $mail) => $mail->hasTo('jana@example.com') && $mail->reason === 'recover' && $mail->validMinutes === 30);
-        Mail::assertQueuedCount(1);
+        // Bez salonu (nebo s neexistujícím) jen obecná rada, žádná chyba.
+        $this->get('/obnovit')->assertOk()->assertDontSee('tel:', false);
+        $this->get('/obnovit?salon=neexistuje')->assertOk()->assertDontSee('tel:', false);
+
+        expect(CustomerAccessToken::count())->toBe(0);
     });
 
-    test('odkaz z e-mailu vydá nový token a starý nezneplatní', function () {
-        $jana = customer($this->salon);
-        $old = tokenFor($jana);
-        $url = URL::temporarySignedRoute('recover.claim', now()->addMinutes(30), ['customer' => $jana->id]);
+    test('kdo má odkaz ještě uložený v prohlížeči, dostane se rovnou do účtu', function () {
+        $token = tokenFor(customer($this->salon));
 
-        // Samotné otevření odkazu ještě token nevydá (e-mailové programy odkazy načítají samy).
-        $this->get($url)->assertOk()->assertSee('Pokračovat');
-        expect(CustomerAccessToken::count())->toBe(1);
-
-        $response = $this->post($url);
-        preg_match('#/k/([A-Za-z0-9]{40})$#', $response->headers->get('Location'), $m);
-
-        expect($m)->not->toBeEmpty()->and($m[1])->not->toBe($old);
-
-        $this->get(k($m[1]))->assertOk();
-        $this->get(k($old))->assertOk();
+        $this->withCookie(CustomerCookie::NAME, $token)->get('/obnovit')->assertRedirect(k($token));
     });
 
-    test('odkaz po 30 minutách ani s upraveným podpisem neplatí', function () {
-        $jana = customer($this->salon);
-        $url = URL::temporarySignedRoute('recover.claim', now()->addMinutes(30), ['customer' => $jana->id]);
-
-        $this->get($url.'x')->assertForbidden();
-        $this->post(str_replace("/obnovit/{$jana->id}", '/obnovit/'.customer($this->salon)->id, $url))->assertForbidden();
-
-        $this->travel(31)->minutes();
-
-        $this->get($url)->assertForbidden();
-        $this->post($url)->assertForbidden();
+    test('formulář pro zaslání odkazu e-mailem už neexistuje', function () {
+        $this->post('/obnovit', ['email' => 'jana@example.com'])->assertStatus(405);
+        $this->get('/obnovit/1')->assertNotFound();
     });
 });

@@ -7,6 +7,8 @@
  *
  * config = { vapidKey, subscribeUrl }
  */
+import { registerWorker } from './worker';
+
 const toUint8Array = (base64) => {
     const padded = (base64 + '='.repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
 
@@ -72,7 +74,7 @@ export default (config) => ({
     },
 
     async registration() {
-        await navigator.serviceWorker.register('/sw.js');
+        await registerWorker();
 
         return navigator.serviceWorker.ready;
     },

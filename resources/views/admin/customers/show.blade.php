@@ -50,6 +50,7 @@
             <p class="label mb-3">
                 {{ $activeTokens > 0 ? 'Zákaznice má '.$activeTokens.' platn'.($activeTokens === 1 ? 'ý odkaz' : ($activeTokens < 5 ? 'é odkazy' : 'ých odkazů')).'.' : 'Zákaznice zatím nemá žádný platný odkaz.' }}
                 Odkazem se objedná bez hesla.
+                {{ $customer->reachableByPush() ? 'Upozornění jí chodí na telefon.' : 'Upozornění na telefonu zapnutá nemá.' }}
             </p>
             @unless ($customer->is_blocked)
                 <form method="post" action="{{ route('admin.customers.link', $customer) }}">

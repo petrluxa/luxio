@@ -1,12 +1,12 @@
 # Zadání: rezervační systém pro kadeřnictví
 
-Verze 1 · 15. 11. 2026
+Verze 1 · 15. 11. 2026 · upraveno týž den: bez e-mailů (jen push), dvě kadeřnice, nové barvy
 
 ## 1. Cíl
 
-Jednoduchý rezervační systém pro kadeřnictví (na začátku jedna kadeřnice, připraveno na víc kadeřnic).
+Jednoduchý rezervační systém pro kadeřnictví (na začátku dvě kadeřnice, připraveno na víc).
 Zákaznice si rezervují termíny přes **osobní odkaz s tokenem**, bez hesla. Aplikace je **PWA**, kterou si
-uloží na plochu telefonu, a dostávají **push notifikace** (připomínka, zrušení, změna). Žádné SMS.
+uloží na plochu telefonu, a dostávají **push notifikace** (připomínka, zrušení, změna). Žádné SMS ani e-maily.
 
 ## 2. Role
 
@@ -22,18 +22,20 @@ uloží na plochu telefonu, a dostávají **push notifikace** (připomínka, zru
 ### 3.1 První rezervace (nová zákaznice)
 1. Otevře veřejný odkaz salonu (Instagram, web, Google, QR).
 2. Vybere kadeřnici (nebo „Kdokoliv“), službu, den a čas.
-3. Vyplní **jméno, telefon, e-mail** (vše povinné) + souhlas se zpracováním údajů.
+3. Vyplní **jméno a telefon** (obojí povinné) + souhlas se zpracováním údajů. E-mail se nesbírá.
 4. Systém založí `customer` a osobní `customer_access_token`, uloží do prohlížeče dlouhodobou session
    (cookie 1 rok) a přesměruje na `/k/{token}`.
 5. Rezervace je podle nastavení salonu buď **potvrzená hned**, nebo **čeká na schválení** kadeřnicí
    (výchozí: nové zákaznice čekají na schválení, stávající potvrzeno hned).
 6. Po rezervaci se zobrazí obrazovka **„Uložte si aplikaci na plochu“** (návod pro iPhone/Android)
    a poté výzva k povolení notifikací (jen po ťuknutí na tlačítko – požadavek iOS).
-7. Odejde jeden e-mail s osobním odkazem (aby ho zákaznice neztratila).
+7. Na téže obrazovce si zákaznice může svůj osobní odkaz zkopírovat nebo sdílet, aby ho neztratila.
+   E-mailem se neposílá.
 
-Pokud e-mail nebo telefon už existuje, nová zákaznice se nezakládá: rezervace se přiřadí existující
-zákaznici, ale **jen jako „čeká na schválení“** a nový token se nevydá – odkaz se pošle na uložený e-mail
-(ochrana proti převzetí cizího účtu).
+Pokud telefon už existuje, nová zákaznice se nezakládá: rezervace se přiřadí existující
+zákaznici, ale **jen jako „čeká na schválení“** a nový token se nevydá (ochrana proti převzetí cizího
+účtu). Kadeřnice u takové rezervace vidí, že přišla přes veřejný odkaz, a osobní odkaz zákaznici
+pošle sama z její karty.
 
 ### 3.2 Osobní odkaz
 - `/k/{token}` – token 40 znaků (`Str::random(40)`), v DB jen `sha256` hash.
@@ -42,8 +44,8 @@ zákaznici, ale **jen jako „čeká na schválení“** a nový token se nevyd�
 - Rozsah tokenu: `scope_staff_id` = konkrétní kadeřnice, nebo `null` = celý salon.
 - Kadeřnice může token **zrušit / vyměnit** (např. při zablokování zákaznice).
 - Rate limit: 20 požadavků/min na IP pro `/k/*`, neplatný token → obecná chyba bez detailu.
-- Ztracený odkaz: `/obnovit` → zadá e-mail → přijde nový odkaz (platnost odkazu v e-mailu 30 min,
-  starý token se nezneplatní, pokud ho zákaznice nezruší).
+- Ztracený odkaz: `/obnovit` zákaznici řekne, ať napíše nebo zavolá kadeřnici (s telefonem salonu);
+  nový odkaz jí kadeřnice pošle z karty zákaznice. Starý token se nezneplatní, pokud ho kadeřnice nezruší.
 
 ## 4. Služby a čas
 
@@ -98,7 +100,8 @@ Stavy: `pending` (čeká na schválení) · `confirmed` · `cancelled_by_custome
 
 ## 6. Notifikace
 
-**Kanál:** Web Push (PWA). **Záloha:** e-mail, pouze pokud adresát nemá žádný aktivní push odběr.
+**Kanál:** jen Web Push (PWA). Žádné e-maily ani SMS. Kdo nemá upozornění zapnutá, vidí změny
+v aplikaci – a kadeřnice se po zrušení nebo přesunu dozví, že má dát zákaznici vědět sama.
 
 | Událost | Komu | Text (příklad) |
 |---|---|---|
@@ -115,7 +118,6 @@ Stavy: `pending` (čeká na schválení) · `confirmed` · `cancelled_by_custome
   `starts_at` v okně [teď + 48 h − 5 min, teď + 48 h] a `reminder_sent_at IS NULL`.
 - Push odběry: tabulka balíčku webpush (polymorfní – `Customer` i `User`), víc zařízení na osobu,
   neplatné odběry (410 Gone) mazat.
-- E-maily přes transakční službu (Brevo / Mailgun / SES), SPF + DKIM + DMARC; přiložit `.ics`.
 
 ## 7. PWA
 
@@ -135,7 +137,7 @@ Stavy: `pending` (čeká na schválení) · `confirmed` · `cancelled_by_custome
 2. **Nová rezervace** – kadeřnice (chips) → služby (karty s výběrem, víc služeb) → den (chips na 14 dní,
    šipka dál) → čas (dlaždice) → shrnutí → Rezervovat (vzor viz `docs/design-mockup.html`)
 3. **Moje termíny** – budoucí + historie, zrušit / přesunout
-4. **Profil** – jméno, telefon, e-mail, notifikace zapnuto/vypnuto, „Přidat na plochu“
+4. **Profil** – jméno, telefon, notifikace zapnuto/vypnuto, „Přidat na plochu“
 5. **Onboarding** – přidat na plochu → povolit notifikace
 
 ### Kadeřnice (admin)
@@ -158,34 +160,34 @@ services          id, salon_id, name, description, price_from, price_to null, wo
 staff_service     user_id, service_id, price_from null, work_1 null, pause null, work_2 null
 working_hours     id, user_id, weekday(1-7), starts_at(time), ends_at(time)
 time_offs         id, user_id, starts_at(datetime), ends_at(datetime), reason null
-customers         id, salon_id, name, phone, email, email_verified_at null, preferred_staff_id null,
+customers         id, salon_id, name, phone, preferred_staff_id null,
                   note null, color_recipe(text) null, is_blocked, consent_at, timestamps
 customer_access_tokens  id, customer_id, token_hash(unique), scope_staff_id null, last_used_at null,
                   revoked_at null, timestamps
 bookings          id, salon_id, staff_id, customer_id, starts_at, ends_at, status, total_price,
-                  customer_note null, staff_note null, source(online|manual), reminder_sent_at null,
+                  customer_note null, staff_note null, source(online|manual|salon_link), reminder_sent_at null,
                   cancelled_at null, cancel_reason null, timestamps
 booking_items     id, booking_id, service_id, name, price, work_1, pause, work_2, buffer_after, sequence
 booking_segments  id, booking_id, staff_id, starts_at, ends_at, type(work|pause|buffer)
                   index (staff_id, starts_at)
 push_subscriptions  (z balíčku webpush, polymorfní)
-notification_log  id, notifiable, type, channel(push|mail), booking_id null, sent_at, error null
+notification_log  id, notifiable, type, channel(push), booking_id null, sent_at, error null
 ```
 
 ## 10. Milníky
 
 1. **Základ** – Laravel 12, Tailwind, Alpine, Pest, auth pro admin (Breeze nebo vlastní jednoduchý),
-   migrace, modely, seeder (1 salon, 1 kadeřnice, 5 služeb, pracovní doba, 20 zákaznic, rezervace).
+   migrace, modely, seeder (1 salon, 2 kadeřnice, 5 služeb, pracovní doba, 20 zákaznic, rezervace).
 2. **SlotFinder** – výpočet volných termínů + testy (kap. 4.4).
 3. **Zákaznice** – veřejný odkaz, první rezervace, token, Domů, Nová rezervace, Moje termíny, zrušení.
 4. **Admin** – Dnes, Kalendář, Ke schválení, Zákaznice, Služby, Pracovní doba, Nastavení.
 5. **PWA + push** – manifest, service worker, onboarding, odběry, notifikace z kap. 6, připomínky.
-6. **E-mail záloha + .ics**, obnova odkazu.
+6. **Obnova odkazu** (přes kadeřnici), instalace a pravidelné úlohy bez příkazové řádky.
 7. **Doladění** – tmavý režim, prázdné stavy, chybové stavy, výkon, nasazení (cron, queue worker, HTTPS).
 
 ## 11. Otevřené otázky
 
 - Název aplikace a doména
-- Hosting (stejný jako Roger?)
-- Kolik kadeřnic bude od začátku
+- Hosting – zkušebně v podsložce jiného webu na sdíleném hostingu (bez příkazové řádky); ostrý zatím neurčen
+- Kolik kadeřnic bude od začátku – rozhodnuto: dvě
 - Bude se později prodávat dalším salonům? (pak od začátku vše přes `salon_id` – model s tím počítá)

@@ -1,4 +1,4 @@
-{{-- Kontakt nové zákaznice (veřejný odkaz salonu). Vše povinné – SPEC 3.1. --}}
+{{-- Kontakt nové zákaznice (veřejný odkaz salonu): jméno a telefon, obojí povinné – SPEC 3.1. --}}
 <section>
     <h2 class="section-title">Vaše údaje</h2>
 
@@ -14,12 +14,6 @@
         @error('phone') <div class="field-error">{{ $message }}</div> @enderror
     </label>
 
-    <label class="field">
-        <span>E-mail</span>
-        <input class="input" type="email" name="email" value="{{ old('email') }}" autocomplete="email" inputmode="email" maxlength="190" required>
-        @error('email') <div class="field-error">{{ $message }}</div> @enderror
-    </label>
-
     <input type="hidden" name="{{ \App\Services\Security\PublicFormGuard::FIELD }}" value="{{ $formStamp }}">
     @error('form') <div class="banner banner-danger mb-3" role="alert">{{ $message }}</div> @enderror
 
@@ -30,7 +24,7 @@
 
     <label class="check">
         <input type="checkbox" name="consent" value="1" @checked(old('consent')) required>
-        <span>Souhlasím se zpracováním jména, telefonu a e-mailu pro účely rezervace a připomenutí termínu.</span>
+        <span>Souhlasím se zpracováním jména a telefonu pro účely rezervace a připomenutí termínu.</span>
     </label>
     @error('consent') <div class="field-error">{{ $message }}</div> @enderror
 </section>

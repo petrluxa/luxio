@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->morphs('notifiable');
             $table->string('type', 64);
-            $table->string('channel', 8); // push | mail
+            $table->string('channel', 8); // push
             $table->foreignId('booking_id')->nullable()->constrained()->nullOnDelete();
             $table->timestamp('sent_at')->nullable();
             $table->text('error')->nullable();

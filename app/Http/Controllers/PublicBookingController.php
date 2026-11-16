@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\BookingSource;
 use App\Enums\BookingStatus;
 use App\Exceptions\SlotUnavailableException;
 use App\Models\Customer;
@@ -9,7 +10,6 @@ use App\Models\CustomerAccessToken;
 use App\Models\Salon;
 use App\Services\Booking\BookingManager;
 use App\Services\Booking\BookingWizard;
-use App\Services\Customers\AccessLinks;
 use App\Services\Security\PublicFormGuard;
 use App\Support\CustomerCookie;
 use App\Support\Cz;
@@ -17,8 +17,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -29,7 +27,6 @@ class PublicBookingController extends Controller
     public function __construct(
         private readonly BookingWizard $wizard,
         private readonly BookingManager $manager,
-        private readonly AccessLinks $links,
         private readonly PublicFormGuard $guard,
     ) {}
 
@@ -78,15 +75,11 @@ class PublicBookingController extends Controller
 
         $this->guard->check($request);
 
-        $request->merge([
-            'phone' => Cz::normalizePhone($request->input('phone')),
-            'email' => Str::lower(trim((string) $request->input('email'))),
-        ]);
+        $request->merge(['phone' => Cz::normalizePhone($request->input('phone'))]);
 
         $contact = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:100'],
             'phone' => ['required', 'string'],
-            'email' => ['required', 'string', 'email', 'max:190'],
             'consent' => ['accepted'],
         ], [
             'phone.required' => 'Zadejte prosím platné telefonní číslo.',
@@ -95,9 +88,7 @@ class PublicBookingController extends Controller
 
         $selection = $this->wizard->resolve($salon, $request->all());
 
-        $existing = $salon->customers()
-            ->where(fn ($q) => $q->where('email', $contact['email'])->orWhere('phone', $contact['phone']))
-            ->first();
+        $existing = $salon->customers()->where('phone', $contact['phone'])->first();
 
         try {
             if ($existing) {
@@ -112,7 +103,6 @@ class PublicBookingController extends Controller
                     'salon_id' => $salon->id,
                     'name' => trim($contact['name']),
                     'phone' => $contact['phone'],
-                    'email' => $contact['email'],
                     'preferred_staff_id' => $selection->staff?->id,
                     'consent_at' => now(),
                 ]);
@@ -133,7 +123,6 @@ class PublicBookingController extends Controller
         }
 
         $this->guard->hit($request);
-        $this->links->sendWelcome($booking->customer, $token);
 
         return redirect()
             ->route('customer.onboarding', ['token' => $token, 'rezervace' => $booking->id])
@@ -146,15 +135,15 @@ class PublicBookingController extends Controller
     }
 
     /**
-     * E-mail nebo telefon už známe: nová zákaznice se nezakládá a prohlížeč nedostane
-     * žádný token (ochrana proti převzetí cizího účtu). Rezervace jen čeká na schválení
-     * a odkaz odejde na uložený e-mail.
+     * Telefon už známe: nová zákaznice se nezakládá a prohlížeč nedostane žádný token
+     * (ochrana proti převzetí cizího účtu). Rezervace jen čeká na schválení a kadeřnice
+     * u ní vidí, že má zákaznici poslat její osobní odkaz.
      */
     private function bookForExisting(Salon $salon, Customer $existing, $selection): RedirectResponse
     {
         $waiting = $existing->bookings()->upcoming()->where('status', BookingStatus::Pending)->count();
 
-        // Kdo zná cizí e-mail nebo telefon, nesmí zákaznici zahltit rezervacemi a e-maily.
+        // Kdo zná cizí telefon, nesmí zákaznici zaplnit kalendář rezervacemi.
         if (! $existing->is_blocked && $waiting < 2) {
             $this->manager->create(
                 customer: $existing,
@@ -162,12 +151,9 @@ class PublicBookingController extends Controller
                 start: $selection->start,
                 staff: $selection->staff,
                 status: BookingStatus::Pending,
+                source: BookingSource::SalonLink,
                 customerNote: $selection->note,
             );
-
-            if (RateLimiter::attempt('odkaz-na-email:'.$existing->id, 1, fn () => true, 3600)) {
-                $this->links->sendClaim($existing, 'existing');
-            }
         }
 
         return redirect()->route('salon.sent', $salon);

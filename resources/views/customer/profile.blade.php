@@ -22,12 +22,6 @@
             @error('phone') <div class="field-error">{{ $message }}</div> @enderror
         </label>
 
-        <label class="field">
-            <span>E-mail</span>
-            <input class="input" type="email" name="email" value="{{ old('email', $customer->email) }}" autocomplete="email" inputmode="email" maxlength="190" required>
-            @error('email') <div class="field-error">{{ $message }}</div> @enderror
-        </label>
-
         <h2 class="section-title">Notifikace</h2>
         <label class="check">
             <input type="checkbox" name="notifications_enabled" value="1" @checked(old('notifications_enabled', $customer->notifications_enabled))>

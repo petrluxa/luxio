@@ -21,7 +21,6 @@ class ProfileController extends CustomerController
         $data = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:100'],
             'phone' => ['required', 'string'],
-            'email' => ['required', 'string', 'email', 'max:190'],
         ], ['phone.required' => 'Zadejte prosím platné telefonní číslo.']);
 
         $this->customer($request)->update($data + [

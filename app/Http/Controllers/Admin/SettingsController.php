@@ -85,7 +85,7 @@ class SettingsController extends AdminController
     {
         $this->ownerOnly();
 
-        return view('admin.staff', ['tab' => 'more', 'member' => new User(['is_bookable' => true, 'color' => '#B97D80', 'role' => UserRole::Staff])]);
+        return view('admin.staff', ['tab' => 'more', 'member' => new User(['is_bookable' => true, 'color' => '#74624F', 'role' => UserRole::Staff])]);
     }
 
     public function storeStaff(Request $request): RedirectResponse

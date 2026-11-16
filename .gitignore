@@ -26,3 +26,7 @@ Thumbs.db
 # Přenosné PHP jen pro lokální vývoj
 /_php
 /database/*.sqlite*
+
+# Nasazení na hosting: balíček a nastavení pro server (obsahuje hesla)
+/_nasazeni
+/.env.nasazeni

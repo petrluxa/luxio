@@ -7,7 +7,7 @@
     <h1 class="screen-title">Zákaznice</h1>
 
     <form method="get" action="{{ route('admin.customers.index') }}" class="mb-3 flex gap-2" role="search">
-        <input class="input" type="search" name="q" value="{{ $q }}" placeholder="Jméno, telefon nebo e-mail" aria-label="Hledat zákaznici" autocomplete="off">
+        <input class="input" type="search" name="q" value="{{ $q }}" placeholder="Jméno nebo telefon" aria-label="Hledat zákaznici" autocomplete="off">
         <button class="btn btn-outline" type="submit">Hledat</button>
     </form>
 

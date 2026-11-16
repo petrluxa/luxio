@@ -175,7 +175,7 @@ describe('moje termíny', function () {
 });
 
 test('profil: změna kontaktu a vypnutí notifikací', function () {
-    $this->post(k($this->token, '/profil'), ['name' => 'Jana Nová', 'phone' => '777 111 222', 'email' => 'jana.nova@example.com'])
+    $this->post(k($this->token, '/profil'), ['name' => 'Jana Nová', 'phone' => '777 111 222'])
         ->assertSessionHas('status');
 
     expect($this->jana->fresh())

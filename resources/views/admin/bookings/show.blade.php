@@ -31,6 +31,20 @@
         <a class="btn btn-outline btn-block mt-2" href="tel:{{ $booking->customer->phone }}">Zavolat</a>
     @endif
 
+    {{-- Dozví se zákaznice o změně sama? Aplikace neposílá e-maily ani SMS. --}}
+    @if ($booking->source === BookingSource::SalonLink && $booking->status->isActive())
+        <p class="banner mt-2 font-normal">
+            Rezervace přišla přes veřejný odkaz salonu a zákaznice u sebe nemá osobní odkaz.
+            Ověřte si, že je to ona, a pošlete jí ho z její karty – bez něj termín v telefonu neuvidí.
+        </p>
+    @elseif ($booking->status->isActive())
+        <p class="label mt-2">
+            {{ $booking->customer->reachableByPush()
+                ? 'Upozornění jí chodí na telefon.'
+                : 'Nemá zapnutá upozornění – o změně termínu jí dejte vědět sama.' }}
+        </p>
+    @endif
+
     {{-- Služby a čas --}}
     <div class="card mt-3">
         @foreach ($booking->items as $item)
@@ -50,7 +64,7 @@
             <dt class="text-muted">Kadeřnice</dt><dd>{{ $booking->staff->name }}</dd>
             <dt class="text-muted">Cena</dt><dd>{{ $booking->priceLabel() }}</dd>
             <dt class="text-muted">Vznikla</dt>
-            <dd>{{ $booking->source === BookingSource::Manual ? 'ručně v administraci' : 'online' }}, {{ Cz::date($booking->created_at) }}</dd>
+            <dd>{{ $booking->source->label() }}, {{ Cz::date($booking->created_at) }}</dd>
             @if ($booking->customer_note)
                 <dt class="text-muted">Od zákaznice</dt><dd>„{{ $booking->customer_note }}“</dd>
             @endif

@@ -7,7 +7,6 @@ use App\Notifications\BookingNotification;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Notifications\Events\NotificationFailed;
 use Illuminate\Notifications\Events\NotificationSent;
-use NotificationChannels\WebPush\WebPushChannel;
 
 /**
  * Zápis odeslaných (a neodeslaných) upozornění do tabulky `notification_log`.
@@ -47,7 +46,7 @@ class LogNotifications
             'notifiable_type' => $notifiable->getMorphClass(),
             'notifiable_id' => $notifiable->getKey(),
             'type' => $notification->notice->value,
-            'channel' => $channel === WebPushChannel::class ? 'push' : 'mail',
+            'channel' => 'push',
             'booking_id' => $notification->booking->id,
             'sent_at' => $error === null ? now() : null,
             'error' => $error ? mb_substr($error, 0, 1000) : null,

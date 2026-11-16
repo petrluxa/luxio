@@ -25,7 +25,7 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'role' => UserRole::Staff,
-            'color' => '#B97D80',
+            'color' => '#74624F',
             'is_bookable' => true,
             'remember_token' => Str::random(10),
         ];

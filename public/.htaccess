@@ -5,6 +5,10 @@
 
     RewriteEngine On
 
+    # Sdílený hosting: aplikace leží v podsložce _app vedle index.php – z internetu
+    # se do ní nesmí nikdo dostat (je tam .env s hesly). Druhá pojistka je _app/.htaccess.
+    RewriteRule ^_app(/|$) - [F,L]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

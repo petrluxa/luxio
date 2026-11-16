@@ -1,0 +1,149 @@
+<?php
+
+/*
+ * Rozbalovač balíčku Luxio pro hosting bez příkazové řádky. Vzniká z nastroje/sestav-balik.php,
+ * který do něj doplní jednorázový klíč. Leží vedle balíčku luxio-balik.zip ve složce webu.
+ *
+ *   ?t=<klíč>                      jen kontrola serveru (verze PHP, rozšíření), nic nemění
+ *   ?t=<klíč>&krok=rozbal&od=0     rozbaluje balíček do podsložky „luxio“ po částech
+ *
+ * Server má na jeden požadavek jen omezený čas, proto každé volání udělá kus práce a na posledním
+ * řádku řekne, jak pokračovat:  „DALSI od=<číslo>“ (zavolat znovu s tímto číslem), nebo „HOTOVO“.
+ * Po dokončení smaže balíček i sám sebe. Při aktualizaci nechává na místě nastavení (.env)
+ * i data aplikace (storage).
+ */
+const KLIC = '__TOKEN__';
+const CAS_NA_POZADAVEK = 12; // sekund práce v jednom volání
+
+if (! hash_equals(KLIC, (string) ($_GET['t'] ?? ''))) {
+    http_response_code(404);
+    exit;
+}
+
+header('Content-Type: text/plain; charset=utf-8');
+header('Cache-Control: no-store');
+header('X-Robots-Tag: noindex, nofollow');
+
+@set_time_limit(60);
+@ignore_user_abort(true);
+
+$zip = __DIR__.'/luxio-balik.zip';
+$target = __DIR__.'/luxio';
+$step = (string) ($_GET['krok'] ?? '');
+$from = max(0, (int) ($_GET['od'] ?? 0));
+$deadline = microtime(true) + CAS_NA_POZADAVEK;
+
+if ($step !== 'rozbal' || $from === 0) {
+    $ok = PHP_VERSION_ID >= 80200;
+
+    echo 'PHP '.PHP_VERSION.($ok ? '  v pořádku' : '  PŘÍLIŠ STARÉ – aplikace potřebuje 8.2 nebo novější')."\n";
+
+    foreach (['zip', 'pdo_mysql', 'mbstring', 'openssl', 'curl', 'ctype', 'fileinfo', 'tokenizer', 'dom', 'session', 'filter', 'hash'] as $extension) {
+        $loaded = extension_loaded($extension);
+        $ok = $ok && $loaded;
+        echo str_pad($extension, 12).($loaded ? 'ano' : 'CHYBÍ')."\n";
+    }
+
+    foreach (['gmp', 'bcmath', 'pdo_sqlite', 'intl'] as $extension) {
+        echo str_pad($extension, 12).(extension_loaded($extension) ? 'ano' : 'ne (nepovinné)')."\n";
+    }
+
+    echo 'balíček     '.(is_file($zip) ? round(filesize($zip) / 1048576, 1).' MB' : 'NENALEZEN (luxio-balik.zip)')."\n";
+    echo 'luxio/      '.(is_dir($target) ? 'už existuje – půjde o aktualizaci' : 'zatím není – první nasazení')."\n";
+    echo 'čas. limit  '.ini_get('max_execution_time')." s\n";
+    echo 'adresa      '.($_SERVER['REMOTE_ADDR'] ?? '?').(isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? '  (X-Forwarded-For: '.$_SERVER['HTTP_X_FORWARDED_FOR'].')' : '  (bez X-Forwarded-For)')."\n";
+    echo 'https       '.(($_SERVER['HTTPS'] ?? '') ?: '-').'  X-Forwarded-Proto: '.($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '-')."\n\n";
+
+    if (! $ok) {
+        exit("Server nesplňuje požadavky, nic jsem nerozbalil.\n");
+    }
+
+    if ($step !== 'rozbal') {
+        exit("Kontrola v pořádku. Nic jsem neměnil; rozbalení spustí &krok=rozbal&od=0.\n");
+    }
+}
+
+if (! is_file($zip)) {
+    exit("Balíček luxio-balik.zip tu není.\n");
+}
+
+/** Smaže složku; když dojde čas, vrátí false a příště pokračuje, kde přestal. */
+$rrmdir = function (string $dir) use (&$rrmdir, $deadline): bool {
+    if (! is_dir($dir)) {
+        return true;
+    }
+
+    foreach (scandir($dir) as $item) {
+        if ($item === '.' || $item === '..') {
+            continue;
+        }
+
+        if (microtime(true) > $deadline) {
+            return false;
+        }
+
+        $path = $dir.'/'.$item;
+
+        if (is_dir($path) && ! is_link($path)) {
+            if (! $rrmdir($path)) {
+                return false;
+            }
+        } else {
+            @unlink($path);
+        }
+    }
+
+    @rmdir($dir);
+
+    return true;
+};
+
+// Před rozbalením: starý kód pryč (aby nezůstaly smazané soubory), nastavení a data zůstávají.
+if ($from === 0) {
+    foreach (['_app/app', '_app/bootstrap', '_app/config', '_app/database', '_app/lang', '_app/resources', '_app/routes', '_app/vendor', 'build', 'icons'] as $dir) {
+        if (! $rrmdir($target.'/'.$dir)) {
+            exit("Uklízím starou verzi…\nDALSI od=0\n");
+        }
+    }
+}
+
+$archive = new ZipArchive;
+
+if ($archive->open($zip) !== true) {
+    exit("Balíček nejde otevřít.\n");
+}
+
+$count = $archive->numFiles;
+
+for ($i = $from; $i < $count; $i++) {
+    if (microtime(true) > $deadline) {
+        $archive->close();
+        exit("Rozbaleno {$i} z {$count}\nDALSI od={$i}\n");
+    }
+
+    if (! $archive->extractTo($target, $archive->getNameIndex($i))) {
+        $archive->close();
+        exit('Rozbalení se nepovedlo u položky '.$archive->getNameIndex($i)."\n");
+    }
+}
+
+$archive->close();
+
+echo "Rozbaleno položek: {$count}\n";
+
+foreach (['index.php', '.htaccess', 'sw.js', 'build/manifest.json', '_app/.htaccess', '_app/vendor/autoload.php', '_app/bootstrap/app.php', '_app/.env'] as $file) {
+    echo str_pad($file, 28).(is_file($target.'/'.$file) ? 'ano' : 'CHYBÍ')."\n";
+}
+
+foreach (['_app/storage/logs', '_app/storage/framework/views', '_app/storage/framework/sessions', '_app/bootstrap/cache'] as $dir) {
+    echo str_pad($dir, 34).(is_writable($target.'/'.$dir) ? 'zapisovatelné' : 'NEJDE ZAPISOVAT')."\n";
+}
+
+if (function_exists('opcache_reset')) {
+    @opcache_reset();
+}
+
+@unlink($zip);
+@unlink(__FILE__);
+
+echo "\nBalíček i rozbalovač jsou smazané.\nHOTOVO\n";

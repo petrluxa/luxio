@@ -45,11 +45,6 @@
                 <span>Telefon nové zákaznice (nepovinné)</span>
                 <input class="input" type="tel" name="customer_phone" value="{{ old('customer_phone') }}" inputmode="tel" autocomplete="off" placeholder="603 123 456">
             </label>
-            <label class="field">
-                <span>E-mail nové zákaznice (nepovinné)</span>
-                <input class="input" type="email" name="customer_email" value="{{ old('customer_email') }}" inputmode="email" autocomplete="off">
-                @error('customer_email') <div class="field-error">{{ $message }}</div> @enderror
-            </label>
         </div>
     </div>
 </section>

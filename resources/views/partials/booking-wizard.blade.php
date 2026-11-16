@@ -2,7 +2,7 @@
     Rezervační průvodce (vzor: docs/design-mockup.html).
     Vstup: $wizard (data pro Alpine), $action, $replaces (Booking|null),
            $secondaryUrl + $secondaryLabel (levé tlačítko), $submitLabel,
-           $withContact (jméno, telefon, e-mail a souhlas pro novou zákaznici).
+           $withContact (jméno, telefon a souhlas pro novou zákaznici).
 --}}
 <form method="post" action="{{ $action }}" x-data="bookingWizard(@js($wizard))" x-on:submit="submitting = true" novalidate>
     @csrf

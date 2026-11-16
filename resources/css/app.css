@@ -11,32 +11,34 @@
 :root {
     color-scheme: light dark;
 
-    --bg: #f6efe8;
-    --card: #ffffff;
-    --text: #3b2e2c;
-    --muted: #8e7a73;
-    --border: #e7dad0;
-    --primary: #b97d80;
-    --on-primary: #ffffff;
-    --selected: #f5e3e2;
-    --banner: #fbedeb;
-    --banner-text: #9a5f63;
-    --danger: #b5524e;
+    --bg: #efe7db;
+    --card: #fffdf8;
+    --text: #2e241b;
+    --muted: #6e6152;
+    --border: #ded2c1;
+    --primary: #d9ef3f; /* neonová žlutá – jen jako výplň, text na ní je --on-primary */
+    --on-primary: #1f1a0a;
+    --link: #5a4532; /* odkazy, obrysy a ikony – neonová by na světlém pozadí nebyla čitelná */
+    --selected: #f3f8cc;
+    --banner: #74624f;
+    --banner-text: #fff1d6;
+    --danger: #b8342d;
 }
 
 @media (prefers-color-scheme: dark) {
     :root {
-        --bg: #1e1918;
-        --card: #2a2321;
-        --text: #f3e9e4;
-        --muted: #a8968f;
-        --border: #3b322f;
-        --primary: #d6a7a8;
-        --on-primary: #2a1f1e;
-        --selected: #3d2c2d;
-        --banner: #2f2524;
-        --banner-text: #e3b9ba;
-        --danger: #e59591;
+        --bg: #1c1713;
+        --card: #28211b;
+        --text: #f3ebdf;
+        --muted: #afa08e;
+        --border: #40352b;
+        --primary: #d9ef3f;
+        --on-primary: #1f1a0a;
+        --link: #e6cfa6;
+        --selected: #2e2d14;
+        --banner: #3a2f25;
+        --banner-text: #f8deae;
+        --danger: #ff8e85;
     }
 }
 
@@ -50,6 +52,7 @@
     --color-line: var(--border);
     --color-primary: var(--primary);
     --color-on-primary: var(--on-primary);
+    --color-link: var(--link);
     --color-selected: var(--selected);
     --color-banner: var(--banner);
     --color-banner-text: var(--banner-text);
@@ -78,7 +81,7 @@
     }
 
     :focus-visible {
-        outline: 2px solid var(--primary);
+        outline: 2px solid var(--link);
         outline-offset: 2px;
     }
 
@@ -115,7 +118,7 @@
         display: inline-flex;
         align-items: center;
         min-height: 44px;
-        color: var(--primary);
+        color: var(--link);
         font-size: 16px;
     }
 
@@ -248,13 +251,13 @@
     .option-card.is-on,
     .option-card[aria-checked='true'] {
         background: var(--selected);
-        border: 1.5px solid var(--primary);
+        border: 1.5px solid var(--link);
         padding: 13.5px;
     }
 
     .option-card.is-on .dot,
     .option-card[aria-checked='true'] .dot {
-        border: 6px solid var(--primary);
+        border: 6px solid var(--link);
     }
 
     /* Info pruh (příští návštěva) */
@@ -295,8 +298,8 @@
     }
 
     .btn-outline {
-        border-color: var(--primary);
-        color: var(--primary);
+        border-color: var(--link);
+        color: var(--link);
         background: transparent;
     }
 
@@ -378,7 +381,7 @@
 
     .input:focus {
         outline: none;
-        border-color: var(--primary);
+        border-color: var(--link);
     }
 
     textarea.input {
@@ -406,7 +409,7 @@
         width: 22px;
         height: 22px;
         margin-top: 1px;
-        accent-color: var(--primary);
+        accent-color: var(--link);
     }
 
     /* Řádek seznamu (termíny, zákaznice) */
@@ -509,7 +512,7 @@
     }
 
     .cal-head.is-today b {
-        color: var(--primary);
+        color: var(--link);
     }
 
     .cal-hours {
@@ -570,7 +573,7 @@
         overflow: hidden;
         padding: 2px 6px;
         border-radius: 8px;
-        border-left: 3px solid var(--primary);
+        border-left: 3px solid var(--link);
         background: var(--selected);
         color: var(--text);
         font-size: 12px;
@@ -619,7 +622,7 @@
         overflow: hidden;
         padding: 2px 6px;
         border-radius: 8px;
-        border: 1px dashed var(--primary);
+        border: 1px dashed var(--link);
         color: var(--muted);
         font-size: 12px;
         pointer-events: none;

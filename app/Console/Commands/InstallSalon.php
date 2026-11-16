@@ -2,14 +2,10 @@
 
 namespace App\Console\Commands;
 
-use App\Enums\UserRole;
-use App\Models\Salon;
-use App\Models\User;
+use App\Services\Setup\SalonInstaller;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rules\Password;
 
 use function Laravel\Prompts\password;
 use function Laravel\Prompts\text;
@@ -17,6 +13,8 @@ use function Laravel\Prompts\text;
 /**
  * Založení salonu a účtu majitelky na ostrém serveru. Heslo se zadává při instalaci
  * (skrytě), žádné výchozí heslo neexistuje. Ukázková data (`db:seed`) jsou jen pro vývoj.
+ *
+ * Na hostingu bez příkazové řádky totéž udělá adresa /instalace/{klíč} (config/luxio.php).
  */
 class InstallSalon extends Command
 {
@@ -24,7 +22,7 @@ class InstallSalon extends Command
 
     protected $description = 'Založí salon a účet majitelky (ostrý provoz)';
 
-    public function handle(): int
+    public function handle(SalonInstaller $installer): int
     {
         $name = text('Název salonu', placeholder: 'Kadeřnictví Petra', required: true);
         $slug = text('Adresa veřejného odkazu (/s/…)', default: Str::slug($name), required: true);
@@ -34,13 +32,8 @@ class InstallSalon extends Command
 
         $validator = Validator::make(
             ['name' => $name, 'slug' => $slug, 'owner' => $owner, 'email' => $email, 'password' => $secret],
-            [
-                'name' => ['required', 'string', 'max:100'],
-                'slug' => ['required', 'string', 'max:60', 'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/', 'unique:salons,slug'],
-                'owner' => ['required', 'string', 'max:60'],
-                'email' => ['required', 'email', 'max:190', 'unique:users,email'],
-                'password' => ['required', Password::min(10)],
-            ],
+            $installer->rules(),
+            $installer->messages(),
         );
 
         if ($validator->fails()) {
@@ -51,18 +44,7 @@ class InstallSalon extends Command
             return self::FAILURE;
         }
 
-        DB::transaction(function () use ($name, $slug, $owner, $email, $secret) {
-            $salon = Salon::create(['name' => $name, 'slug' => $slug, 'timezone' => config('app.timezone')]);
-
-            User::create([
-                'salon_id' => $salon->id,
-                'name' => $owner,
-                'email' => mb_strtolower($email),
-                'password' => $secret,
-                'role' => UserRole::Owner,
-                'is_bookable' => true,
-            ]);
-        });
+        $installer->install($validator->validated());
 
         $this->info('Salon je založený.');
         $this->line('  Administrace:  '.url('/admin'));

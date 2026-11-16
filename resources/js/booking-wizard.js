@@ -155,7 +155,10 @@ export default (config) => ({
 
     async load(from = null, keepSelection = false) {
         const requestNo = ++this.requestNo;
-        const params = new URLSearchParams();
+        // Adresa už může mít vlastní parametry (při přesunu číslo přesouvané rezervace) –
+        // další se k nim přidávají, nesmí se lepit za druhý otazník.
+        const url = new URL(config.slotsUrl, window.location.href);
+        const params = url.searchParams;
 
         this.serviceIds.forEach((id) => params.append('services[]', id));
 
@@ -175,8 +178,8 @@ export default (config) => ({
         this.failed = false;
 
         try {
-            const response = await fetch(`${config.slotsUrl}?${params}`, {
-                headers: { Accept: 'application/json' },
+            const response = await fetch(url, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 credentials: 'same-origin',
             });
 

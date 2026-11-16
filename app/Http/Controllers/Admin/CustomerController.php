@@ -130,7 +130,7 @@ class CustomerController extends AdminController
         return Customer::query()
             ->where('salon_id', $this->salon()->id)
             ->when($q !== '', fn (Builder $query) => $query->where(function (Builder $w) use ($q, $phone) {
-                $w->where('name', 'like', "%{$q}%")->orWhere('email', 'like', "%{$q}%");
+                $w->where('name', 'like', "%{$q}%");
 
                 if (strlen($phone) >= 3) {
                     $w->orWhere('phone', 'like', "%{$phone}%");
@@ -142,13 +142,11 @@ class CustomerController extends AdminController
     {
         $request->merge([
             'phone' => $request->filled('phone') ? Cz::normalizePhone($request->input('phone')) ?? 'x' : null,
-            'email' => $request->filled('email') ? mb_strtolower(trim($request->input('email'))) : null,
         ]);
 
         return $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:100'],
             'phone' => ['nullable', 'string', 'regex:/^\+\d{9,15}$/'],
-            'email' => ['nullable', 'string', 'email', 'max:190'],
             'preferred_staff_id' => ['nullable', 'integer', Rule::in($this->staffList()->modelKeys())],
             'note' => ['nullable', 'string', 'max:5000'],
             'color_recipe' => ['nullable', 'string', 'max:5000'],

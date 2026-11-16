@@ -1,7 +1,7 @@
 # Luxio – rezervační systém pro kadeřnictví
 
 Zákaznice si přes osobní odkaz (bez hesla) rezervují termíny u své kadeřnice, kadeřnice spravuje
-kalendář v administraci. Aplikace je PWA, upozornění chodí jako Web Push na telefon. Žádné SMS.
+kalendář v administraci. Aplikace je PWA, upozornění chodí jako Web Push na telefon. Žádné SMS ani e-maily.
 
 - Zadání: [docs/SPEC.md](docs/SPEC.md)
 - Vzhled: [docs/DESIGN.md](docs/DESIGN.md), vzor [docs/design-mockup.html](docs/design-mockup.html)
@@ -21,13 +21,13 @@ php artisan migrate --seed      # vypíše odkaz do administrace i ukázkový od
 npm install
 npm run build                   # nebo `npm run dev` při úpravách vzhledu
 php artisan serve
-php artisan queue:work          # ve druhém okně: odesílá upozornění a e-maily
+php artisan queue:work          # ve druhém okně: odesílá upozornění
 ```
 
-Výchozí `.env` používá SQLite a e-maily zapisuje do `storage/logs/laravel.log`, takže není potřeba
-nic dalšího instalovat. Pro MySQL nastavte `DB_CONNECTION=mysql` a přístupy k databázi.
+Výchozí `.env` používá SQLite, takže není potřeba nic dalšího instalovat. Pro MySQL nastavte `DB_CONNECTION=mysql` a přístupy k databázi.
 
-Ukázková data (jen pro vývoj): administrace `petra@example.com` / `heslo123`, veřejný odkaz `/s/petra`.
+Ukázková data (jen pro vývoj): administrace `petra@example.com` / `heslo123` (majitelka),
+druhá kadeřnice `lucie@example.com` / `heslo123`, veřejný odkaz `/s/petra`.
 
 Na Windows potřebuje generování klíčů a šifrování upozornění proměnnou `OPENSSL_CONF`
 s cestou k `openssl.cnf` (v balíku PHP ve složce `extras/ssl`).
@@ -51,7 +51,8 @@ hranice dne, víc služeb, souběžná rezervace, státní svátky, lhůty).
 | Osobní odkaz zákaznice `/k/{token}` (v databázi jen SHA-256 hash) | `app/Http/Middleware/ResolveCustomerToken.php` |
 | Veřejný odkaz salonu `/s/{salon}` – první rezervace | `app/Http/Controllers/PublicBookingController.php` |
 | Administrace kadeřnice `/admin` | `app/Http/Controllers/Admin`, `routes/admin.php` |
-| Upozornění (push, e-mail jako záloha, `.ics`) | `app/Notifications`, `app/Listeners` |
+| Upozornění (jen push) | `app/Notifications`, `app/Listeners` |
+| Instalace a pravidelné úlohy bez příkazové řádky | `app/Http/Controllers/System`, `routes/system.php` |
 | Připomínky a plánovač | `app/Console/Commands`, `routes/console.php` |
 | PWA: manifest, service worker, onboarding | `app/Http/Controllers/PwaController.php`, `public/sw.js`, `resources/js/push.js` |
 | České formáty data, času a ceny | `app/Support/Cz.php` |
@@ -64,16 +65,18 @@ hranice dne, víc služeb, souběžná rezervace, státní svátky, lhůty).
 - **Víc služeb** v jedné rezervaci jde za sebou v pořadí ceníku, uklízí se jednou (nejdelší úklid).
 - **„Kdokoliv“** nabídne sjednocení časů všech kadeřnic a přiřadí tu s nejméně rezervacemi ten den.
 - **Nová zákaznice** čeká na schválení; schválením první rezervace se stane ověřenou.
-- **Známý e-mail nebo telefon** ve veřejném formuláři nezaloží nový účet ani nevydá token –
-  rezervace čeká na schválení a odkaz odejde na uložený e-mail.
-- **Vypnutá upozornění** u zákaznice: připomínky se neposílají, zrušení nebo přesun termínu
-  kadeřnicí jí ale přijde e-mailem.
+- **Známý telefon** ve veřejném formuláři nezaloží nový účet ani nevydá token – rezervace čeká
+  na schválení a kadeřnice u ní vidí, že má zákaznici poslat její osobní odkaz.
+- **Žádné e-maily ani SMS.** Kdo nemá upozornění na telefonu zapnutá, vidí změny jen v aplikaci –
+  administrace proto kadeřnici po zrušení nebo přesunu řekne, že má dát zákaznici vědět sama.
+- **Ztracený odkaz** posílá kadeřnice z karty zákaznice (Poslat odkaz → sdílet přes WhatsApp / Messenger).
 
 ## Nasazení na server
 
 1. Kořen webu musí mířit do složky `public/` (zbytek aplikace nesmí být dostupný z internetu).
 2. `.env`: `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https://…`, `SESSION_SECURE_COOKIE=true`,
-   přístupy k MySQL, poštovní služba (Brevo / Mailgun / SES) a `VAPID_SUBJECT=mailto:…`.
+   přístupy k MySQL a `VAPID_SUBJECT=mailto:…` (kontakt pro služby Apple a Google, které upozornění
+   doručují – e-mail se na něj neposílá).
 3. Příkazy po nahrání:
 
    ```bash
@@ -95,7 +98,31 @@ hranice dne, víc služeb, souběžná rezervace, státní svátky, lhůty).
    Kde může běžet trvalý proces (`php artisan queue:work` pod supervizorem), nastavte
    `QUEUE_VIA_SCHEDULER=false`.
 5. **HTTPS je nutné** – bez něj nefunguje přidání na plochu ani upozornění.
-6. **Pošta**: doména odesílatele má mít SPF, DKIM a DMARC, jinak e-maily skončí ve spamu.
-7. Za proxy nebo CDN nastavte důvěryhodné proxy, aby limity podle IP adresy počítaly skutečné návštěvníky.
+6. Za proxy nebo CDN nastavte `TRUSTED_PROXIES`, aby limity podle IP adresy počítaly skutečné návštěvníky.
 
 Ukázková data (`db:seed`) se na ostrém serveru nevytvoří – mají veřejně známé heslo.
+
+### Podsložka webu a hosting bez příkazové řádky
+
+Aplikace umí běžet i v podsložce cizího webu (např. `https://example.com/luxio`) a na sdíleném
+hostingu bez SSH a bez cronu:
+
+- **Podsložka**: `APP_URL` včetně podsložky a `SESSION_PATH=/luxio`. Ikony, manifest, service worker
+  i upozornění si podsložku doplní samy.
+- **Rozložení souborů**: obsah `public/` se nahraje do složky webu, zbytek aplikace (včetně `vendor`
+  z `composer install --no-dev` a `.env`) do její podsložky `_app/`. `index.php` ji tam najde sám;
+  přístup zvenku do `_app/` zakazuje `.htaccess` – po nahrání ověřte, že `…/_app/.env` vrací 403.
+- **Instalace**: `LUXIO_SETUP_KEY` zapne adresu `/instalace/{klíč}`. Její otevření připraví databázi
+  (migrace) a při první instalaci nabídne založení salonu s vlastním heslem.
+- **Pravidelné úlohy**: `LUXIO_CRON_KEY` zapne adresu `/cron/{klíč}`; časovač hostingu ji má volat
+  každých 5 minut (připomínky, uzavírání proběhlých termínů, fronta). Při řidším volání prodlužte
+  `REMINDER_WINDOW_MINUTES`.
+- **Fronta**: bez trvale běžícího procesu nastavte `QUEUE_CONNECTION=sync` – upozornění pak odejde hned.
+- **Sdílená databáze**: `DB_PREFIX=luxio_` oddělí tabulky od jiné aplikace ve stejné databázi.
+  Tabulky se zakládají jako InnoDB (`DB_ENGINE`), i když má server výchozí MyISAM – ten neumí
+  transakce, na kterých stojí ochrana proti dvojí rezervaci.
+- **Sestavení a nahrání**: `php nastroje/priprav-env.php https://…/luxio` založí nastavení pro server
+  (`.env.nasazeni`, není v gitu), `php nastroje/sestav-balik.php` sestaví balíček a rozbalovač do
+  `_nasazeni/`. Oba soubory se nahrají do složky webu a `nastroje/rozbal-na-serveru.sh https://…`
+  balíček po částech rozbalí; rozbalovač nejdřív zkontroluje verzi PHP a rozšíření a nakonec smaže
+  balíček i sám sebe. Aktualizace: `sestav-balik.php --bez-env`.

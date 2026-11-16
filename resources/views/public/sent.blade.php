@@ -10,8 +10,8 @@
     <div class="banner">Čeká na potvrzení kadeřnicí.</div>
 
     <div class="card mt-3">
-        <p>Na váš e-mail jsme poslali odkaz, přes který uvidíte své termíny. Jakmile kadeřnice rezervaci potvrdí, dáme vám vědět.</p>
-        <p class="mt-2 text-muted">E-mail nepřišel? Podívejte se do nevyžádané pošty.</p>
+        <p>Toto telefonní číslo už u nás máme. Kadeřnice se vám proto ozve a pošle vám váš osobní odkaz – přes něj své termíny uvidíte a můžete je měnit.</p>
+        <p class="mt-2 text-muted">Odkaz si pak přidejte na plochu telefonu, ať ho máte vždy po ruce.</p>
     </div>
 
     @if ($salon->phone)

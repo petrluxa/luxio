@@ -1,4 +1,5 @@
 @use('App\Support\Cz')
+@use('App\Enums\BookingSource')
 @extends('layouts.admin')
 
 @section('title', 'Ke schválení')
@@ -19,6 +20,13 @@
                     <span class="mt-2 block border-t border-line pt-2 text-[14px]">„{{ $booking->customer_note }}“</span>
                 @endif
             </a>
+
+            @if ($booking->source === BookingSource::SalonLink)
+                <p class="banner mt-3 font-normal">
+                    Přišla přes veřejný odkaz salonu, ale telefon už v zákaznicích máte. Ověřte si, že je to opravdu ona,
+                    a <a class="font-semibold underline" href="{{ route('admin.customers.show', $booking->customer) }}">pošlete jí osobní odkaz</a> – bez něj svůj termín v telefonu neuvidí.
+                </p>
+            @endif
 
             <div class="mt-3 flex gap-2" x-data="{ rejecting: false }">
                 <form method="post" action="{{ route('admin.bookings.approve', $booking) }}" class="flex flex-1" x-show="!rejecting">

@@ -17,7 +17,7 @@
             'action' => route('salon.store', $salon),
             'replaces' => null,
             'withContact' => true,
-            'secondaryUrl' => route('recover'),
+            'secondaryUrl' => route('recover', ['salon' => $salon->slug]),
             'secondaryLabel' => 'Už mám účet',
             'submitLabel' => 'Rezervovat',
         ])

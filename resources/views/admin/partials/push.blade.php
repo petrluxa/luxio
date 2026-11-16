@@ -3,5 +3,5 @@
 @include('partials.install-steps', [
     'pushConfig' => ['vapidKey' => config('webpush.vapid.public_key'), 'subscribeUrl' => route('admin.push.store')],
     'pushText' => 'Dáme vám vědět o nové rezervaci, zrušení a o zákaznicích, které čekají na schválení.',
-    'fallbackText' => 'Upozornění vám budou chodit e-mailem.',
+    'fallbackText' => 'Nové rezervace uvidíte tady v administraci.',
 ])

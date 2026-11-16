@@ -13,8 +13,6 @@ return new class extends Migration
             $table->foreignId('salon_id')->constrained()->cascadeOnDelete();
             $table->string('name');
             $table->string('phone', 20)->nullable(); // normalizovaný tvar +420123456789
-            $table->string('email')->nullable();
-            $table->timestamp('email_verified_at')->nullable();
             $table->foreignId('preferred_staff_id')->nullable()->constrained('users')->nullOnDelete();
             $table->text('note')->nullable();
             $table->text('color_recipe')->nullable();
@@ -25,7 +23,6 @@ return new class extends Migration
             $table->timestamp('consent_at')->nullable();
             $table->timestamps();
 
-            $table->index(['salon_id', 'email']);
             $table->index(['salon_id', 'phone']);
             $table->index(['salon_id', 'name']);
         });

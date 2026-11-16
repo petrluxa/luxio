@@ -1,10 +1,16 @@
 /*
  * Service worker: příjem push upozornění, klik na upozornění a jednoduchá offline stránka.
  * Data aplikace se necachují – termíny musí být vždy čerstvé ze serveru.
+ *
+ * Aplikace může běžet i v podsložce webu (např. /luxio), proto se všechny cesty
+ * počítají od adresy, na které tento soubor leží.
  */
-const VERSION = 'luxio-v1';
+const VERSION = 'luxio-v2';
 const META = 'luxio-meta';
-const OFFLINE_URL = '/offline';
+const ROOT = new URL('./', self.location.href);
+const inApp = (path) => new URL(String(path).replace(/^\/+/, ''), ROOT).href;
+const OFFLINE_URL = inApp('offline');
+const BASE_KEY = inApp('__base');
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
@@ -18,8 +24,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         (async () => {
+            // Mazat jen vlastní staré verze – na stejné doméně mohou běžet i jiné aplikace.
             const keys = await caches.keys();
-            await Promise.all(keys.filter((key) => key !== VERSION && key !== META).map((key) => caches.delete(key)));
+            const old = keys.filter((key) => key.startsWith('luxio-') && key !== VERSION && key !== META);
+
+            await Promise.all(old.map((key) => caches.delete(key)));
             await self.clients.claim();
         })(),
     );
@@ -40,7 +49,7 @@ self.addEventListener('message', (event) => {
     const data = event.data || {};
 
     if (data.type === 'base' && typeof data.base === 'string' && data.base.startsWith('/k/')) {
-        event.waitUntil(caches.open(META).then((cache) => cache.put('/__base', new Response(data.base))));
+        event.waitUntil(caches.open(META).then((cache) => cache.put(BASE_KEY, new Response(data.base))));
     }
 });
 
@@ -55,6 +64,12 @@ self.addEventListener('push', (event) => {
 
     const { title = 'Rezervace', ...options } = payload;
 
+    for (const key of ['icon', 'badge']) {
+        if (typeof options[key] === 'string') {
+            options[key] = inApp(options[key]);
+        }
+    }
+
     event.waitUntil(self.registration.showNotification(title, options));
 });
 
@@ -65,16 +80,22 @@ self.addEventListener('notificationclick', (event) => {
     event.waitUntil(
         (async () => {
             const data = event.notification.data || {};
-            let url = typeof data.url === 'string' ? data.url : null;
+            let path = typeof data.url === 'string' ? data.url : null;
 
-            if (!url) {
-                const stored = await (await caches.open(META)).match('/__base');
+            if (!path) {
+                const stored = await (await caches.open(META)).match(BASE_KEY);
                 const base = stored ? await stored.text() : '';
 
-                url = base ? base + (typeof data.path === 'string' ? data.path : '') : '/';
+                path = base ? base + (typeof data.path === 'string' ? data.path : '') : '';
             }
 
-            const target = new URL(url, self.location.origin).href;
+            // Cíl je vždy uvnitř aplikace – cokoliv jiného skončí na její úvodní stránce.
+            let target = inApp(path);
+
+            if (!target.startsWith(ROOT.href)) {
+                target = ROOT.href;
+            }
+
             const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
 
             for (const client of windows) {

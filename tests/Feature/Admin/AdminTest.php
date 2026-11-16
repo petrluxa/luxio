@@ -11,6 +11,7 @@ use App\Models\Service;
 use App\Models\User;
 use App\Services\Availability\SlotFinder;
 use App\Services\Booking\BookingManager;
+use Illuminate\Support\Facades\Notification;
 
 beforeEach(function () {
     $this->travelTo(TEST_NOW);
@@ -235,30 +236,51 @@ describe('rezervace', function () {
         // Zrušenou už znovu zrušit nejde.
         $this->post("/admin/rezervace/{$booking->id}/zrusit")->assertSessionHas('error');
     });
+
+    test('po zrušení nebo přesunu se kadeřnice dozví, jestli má dát zákaznici vědět sama', function () {
+        Notification::fake(); // push se v testu doopravdy neposílá
+
+        $first = bookingAt($this, '10:00');
+        $second = bookingAt($this, '13:00');
+
+        $this->actingAs($this->petra);
+
+        // Jana upozornění zapnutá nemá – a e-mail ani SMS jí aplikace nepošle.
+        $this->get("/admin/rezervace/{$first->id}")->assertSee('o změně termínu jí dejte vědět sama');
+        $this->post("/admin/rezervace/{$first->id}/zrusit")
+            ->assertSessionHas('status', 'Rezervace je zrušená. Zákaznice nemá zapnutá upozornění – dejte jí prosím vědět sama.');
+
+        // S upozorněním na telefonu to aplikace vyřídí sama.
+        $this->jana->updatePushSubscription('https://push.example.com/jana', 'klic', 'tajemstvi', 'aes128gcm');
+
+        $this->get("/admin/rezervace/{$second->id}")->assertSee('Upozornění jí chodí na telefon.');
+        $this->post("/admin/rezervace/{$second->id}/presun", ['date' => TEST_DAY, 'time' => '14:30'])
+            ->assertSessionHas('status', 'Termín je přesunutý. Zákaznici jde upozornění na telefon.');
+        $this->get("/admin/zakaznice/{$this->jana->id}")->assertSee('Upozornění jí chodí na telefon.');
+    });
 });
 
 describe('zákaznice', function () {
-    test('hledání podle jména, telefonu i e-mailu', function () {
-        customer($this->salon, ['name' => 'Eva Malá', 'phone' => '+420777888999', 'email' => 'eva@example.com']);
+    test('hledání podle jména a telefonu', function () {
+        customer($this->salon, ['name' => 'Eva Malá', 'phone' => '+420777888999']);
 
         $this->actingAs($this->petra);
 
         $this->get('/admin/zakaznice?q=nov')->assertSee('Jana Nováková')->assertDontSee('Eva Malá');
         $this->get('/admin/zakaznice?q=777 888')->assertSee('Eva Malá')->assertDontSee('Jana Nováková');
-        $this->get('/admin/zakaznice?q=eva@')->assertSee('Eva Malá');
         $this->getJson('/admin/zakaznice/hledat?q=ja')->assertOk()->assertJsonPath('0.name', 'Jana Nováková')->assertJsonCount(1);
     });
 
     test('karta: receptura barvy, poznámky a kontakty', function () {
         $this->actingAs($this->petra)->post("/admin/zakaznice/{$this->jana->id}", [
-            'name' => 'Jana Nováková', 'phone' => '603 123 456', 'email' => 'JANA@example.com',
+            'name' => 'Jana Nováková', 'phone' => '603 123 456',
             'color_recipe' => 'Koleston 7/1 + 6 %', 'note' => 'Alergie na amoniak',
         ])->assertSessionHas('status');
 
         expect($this->jana->fresh())
             ->color_recipe->toBe('Koleston 7/1 + 6 %')
             ->note->toBe('Alergie na amoniak')
-            ->email->toBe('jana@example.com');
+            ->phone->toBe('+420603123456');
     });
 
     test('„Poslat odkaz“ vydá funkční osobní odkaz a ukáže ho jen jednou', function () {

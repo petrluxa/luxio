@@ -28,7 +28,7 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->string('role', 16)->default('staff'); // owner | staff
-            $table->string('color', 9)->default('#B97D80');
+            $table->string('color', 9)->default('#74624F');
             $table->boolean('is_bookable')->default(true);
             $table->rememberToken();
             $table->timestamps();

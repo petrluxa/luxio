@@ -2,11 +2,11 @@
 
 use App\Enums\BookingStatus;
 use App\Enums\UserRole;
-use App\Mail\AccessLinkMail;
 use App\Models\Booking;
 use App\Models\Customer;
 use App\Models\Salon;
 use App\Models\User;
+use App\Services\Booking\BookingManager;
 use App\Services\Security\PublicFormGuard;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
@@ -28,7 +28,7 @@ function publicBooking($test, array $overrides = []): array
 {
     return $overrides + [
         'services' => [$test->cut->id], 'date' => TEST_DAY, 'time' => '10:00',
-        'name' => 'Jana Nováková', 'phone' => '603 123 456', 'email' => 'jana@example.com', 'consent' => '1',
+        'name' => 'Jana Nováková', 'phone' => '603 123 456', 'consent' => '1',
         PublicFormGuard::FIELD => stamp(),
     ];
 }
@@ -40,7 +40,6 @@ describe('veřejný formulář proti robotům', function () {
         $this->post('/s/'.$this->salon->slug, publicBooking($this, [PublicFormGuard::FIELD => (string) now()->subMinute()->getTimestamp()]))->assertSessionHasErrors('form');
 
         expect(Customer::count())->toBe(0);
-        Mail::assertNothingQueued();
     });
 
     test('příliš rychlé nebo příliš staré odeslání neprojde', function () {
@@ -56,18 +55,18 @@ describe('veřejný formulář proti robotům', function () {
 
     test('z jedné adresy projdou nejvýš 4 první rezervace za hodinu', function () {
         foreach (['9:00', '10:00', '11:00', '13:00'] as $i => $time) {
-            $this->post('/s/'.$this->salon->slug, publicBooking($this, ['time' => $time, 'email' => "z{$i}@example.com", 'phone' => "60312345{$i}"]))
+            $this->post('/s/'.$this->salon->slug, publicBooking($this, ['time' => $time, 'phone' => "60312345{$i}"]))
                 ->assertSessionHasNoErrors();
         }
 
-        $this->post('/s/'.$this->salon->slug, publicBooking($this, ['time' => '14:00', 'email' => 'z9@example.com', 'phone' => '603999999']))
+        $this->post('/s/'.$this->salon->slug, publicBooking($this, ['time' => '14:00', 'phone' => '603999999']))
             ->assertSessionHasErrors('form');
 
         expect(Customer::count())->toBe(4);
 
         $this->travel(61)->minutes();
 
-        $this->post('/s/'.$this->salon->slug, publicBooking($this, ['time' => '14:00', 'email' => 'z9@example.com', 'phone' => '603999999']))
+        $this->post('/s/'.$this->salon->slug, publicBooking($this, ['time' => '14:00', 'phone' => '603999999']))
             ->assertSessionHasNoErrors();
     });
 
@@ -78,26 +77,29 @@ describe('veřejný formulář proti robotům', function () {
         expect(Booking::count())->toBe(0);
     });
 
-    test('cizí e-mail nejde zahltit: nejvýš 2 čekající rezervace a 1 e-mail za hodinu', function () {
-        $jana = customer($this->salon, ['email' => 'jana@example.com', 'phone' => '+420603123456']);
+    test('cizí telefon nejde zneužít k zaplnění kalendáře: nejvýš 2 čekající rezervace', function () {
+        $jana = customer($this->salon, ['phone' => '+420603123456']);
 
         foreach (['9:00', '10:00', '11:00'] as $time) {
             $this->post('/s/'.$this->salon->slug, publicBooking($this, ['time' => $time]))->assertRedirect("/s/{$this->salon->slug}/odeslano");
         }
 
         expect($jana->bookings()->where('status', BookingStatus::Pending)->count())->toBe(2);
-        Mail::assertQueuedCount(1);
     });
 });
 
-test('obnova odkazu pošle na jednu zákaznici nejvýš 3 e-maily za hodinu', function () {
-    customer($this->salon, ['email' => 'jana@example.com']);
+test('aplikace neposílá žádné e-maily – ani při rezervaci, ani při změnách termínu', function () {
+    $this->post('/s/'.$this->salon->slug, publicBooking($this))->assertSessionHasNoErrors();
 
-    foreach (range(1, 5) as $i) {
-        $this->post('/obnovit', ['email' => 'jana@example.com'])->assertSessionHas('status');
-    }
+    $booking = Booking::sole();
+    $manager = app(BookingManager::class);
+    $manager->approve($booking);
+    $manager->move($booking->fresh(), at('14:00'));
+    $manager->cancelByStaff($booking->fresh(), 'Nemoc');
 
-    Mail::assertQueued(AccessLinkMail::class, 3);
+    $this->artisan('bookings:send-reminders')->assertSuccessful();
+
+    Mail::assertNothingOutgoing();
 });
 
 describe('hlavičky a vyhledávače', function () {
@@ -123,6 +125,18 @@ describe('hlavičky a vyhledávače', function () {
 });
 
 describe('instalace na ostrém serveru', function () {
+    test('ukázková data pro vývoj se naplní: dvě kadeřnice, zákaznice a rezervace u obou', function () {
+        $this->artisan('db:seed')->assertSuccessful();
+
+        $salon = Salon::where('slug', 'petra')->sole();
+        $bookings = Booking::where('salon_id', $salon->id);
+
+        expect($salon->staff()->pluck('name')->all())->toEqualCanonicalizing(['Petra', 'Lucie'])
+            ->and($salon->customers()->count())->toBe(20)
+            ->and($bookings->count())->toBeGreaterThan(50)
+            ->and($bookings->distinct()->pluck('staff_id'))->toHaveCount(2);
+    });
+
     test('ukázková data se známým heslem se na ostrém serveru nevytvoří', function () {
         app()->detectEnvironment(fn () => 'production');
 

@@ -6,11 +6,9 @@ use App\Enums\BookingNotice;
 use App\Models\Booking;
 use App\Models\Customer;
 use App\Support\Cz;
-use App\Support\Ics;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -18,8 +16,8 @@ use NotificationChannels\WebPush\WebPushMessage;
 /**
  * Upozornění k rezervaci pro zákaznici i kadeřnici (SPEC 6).
  *
- * Kanál: Web Push. E-mail je jen záloha – použije se, když adresát nemá žádný
- * aktivní push odběr. Žádné SMS.
+ * Jediný kanál je Web Push. Žádné e-maily, žádné SMS: kdo nemá upozornění zapnutá,
+ * vidí změny v aplikaci – a kadeřnice se v administraci dozví, že mu má dát vědět sama.
  */
 class BookingNotification extends Notification implements ShouldQueue
 {
@@ -36,22 +34,11 @@ class BookingNotification extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        $push = $notifiable->pushSubscriptions()->exists();
-
         if ($notifiable instanceof Customer && ! $notifiable->notifications_enabled) {
-            // Vypnutá upozornění: nic neposílat, jen důležité změny e-mailem.
-            if (! $this->notice->isCritical()) {
-                return [];
-            }
-
-            $push = false;
+            return [];
         }
 
-        if ($push) {
-            return [WebPushChannel::class];
-        }
-
-        return $notifiable->email ? ['mail'] : [];
+        return $notifiable->pushSubscriptions()->exists() ? [WebPushChannel::class] : [];
     }
 
     public function toWebPush(object $notifiable): WebPushMessage
@@ -64,39 +51,14 @@ class BookingNotification extends Notification implements ShouldQueue
         return (new WebPushMessage)
             ->title($this->title())
             ->body($this->body())
-            ->icon('/icons/icon-192.png')
-            ->badge('/icons/badge-96.png')
+            // Cesty bez domény: service worker si je doplní podle toho, kde aplikace běží.
+            ->icon('icons/icon-192.png')
+            ->badge('icons/badge-96.png')
             ->lang('cs')
             ->tag('rezervace-'.$this->booking->id)
             ->renotify()
             ->data($target)
             ->options(['TTL' => 60 * 60 * 12, 'urgency' => 'high']);
-    }
-
-    public function toMail(object $notifiable): MailMessage
-    {
-        $salon = $this->booking->salon;
-
-        $mail = (new MailMessage)
-            ->subject($this->title().' – '.$salon->name)
-            ->greeting('Dobrý den,')
-            ->line($this->body().'.');
-
-        if ($this->notice->forCustomer()) {
-            $mail->line('Podrobnosti najdete ve svých rezervacích – otevřete je přes svůj osobní odkaz nebo ikonu na ploše telefonu.');
-
-            if ($salon->phone) {
-                $mail->line('Telefon do salonu: '.Cz::phone($salon->phone));
-            }
-
-            if ($this->notice->attachesCalendar()) {
-                $mail->attachData(Ics::forBooking($this->booking), 'rezervace.ics', ['mime' => 'text/calendar; charset=utf-8']);
-            }
-        } else {
-            $mail->action('Otevřít rezervaci', route('admin.bookings.show', $this->booking));
-        }
-
-        return $mail->salutation($salon->name);
     }
 
     public function title(): string

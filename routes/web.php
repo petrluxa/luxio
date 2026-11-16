@@ -10,7 +10,7 @@ use App\Http\Controllers\RecoverController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
-Route::get('/offline', [PwaController::class, 'offline'])->name('offline');
+Route::get('/offline', [PwaController::class, 'offline'])->middleware('background')->name('offline');
 
 /*
 |--------------------------------------------------------------------------
@@ -19,7 +19,7 @@ Route::get('/offline', [PwaController::class, 'offline'])->name('offline');
 */
 Route::prefix('s/{salon}')->name('salon.')->group(function () {
     Route::get('/', [PublicBookingController::class, 'create'])->name('show');
-    Route::get('/terminy', [PublicBookingController::class, 'slots'])->middleware('throttle:slots')->name('slots');
+    Route::get('/terminy', [PublicBookingController::class, 'slots'])->middleware(['throttle:slots', 'background'])->name('slots');
     Route::post('/', [PublicBookingController::class, 'store'])->middleware('throttle:6,1')->name('store');
     Route::get('/odeslano', [PublicBookingController::class, 'sent'])->name('sent');
 });
@@ -30,8 +30,9 @@ Route::prefix('s/{salon}')->name('salon.')->group(function () {
 |--------------------------------------------------------------------------
 */
 Route::prefix('k/{token}')->name('customer.')->middleware('customer.token')->group(function () {
-    // Pomocné požadavky stránky (nepočítají se do limitu 20/min na otevírání obrazovek).
-    Route::middleware('throttle:slots')->group(function () {
+    // Pomocné požadavky stránky (nepočítají se do limitu 20/min na otevírání obrazovek
+    // a aplikace se na ně po odeslání formuláře nevrací).
+    Route::middleware(['throttle:slots', 'background'])->group(function () {
         Route::get('/rezervace/terminy', [Customer\BookingController::class, 'slots'])->name('booking.slots');
         Route::get('/manifest.webmanifest', [PwaController::class, 'customerManifest'])->name('manifest');
         Route::post('/push', [PushSubscriptionController::class, 'store'])->name('push.store');
@@ -60,10 +61,7 @@ Route::prefix('k/{token}')->name('customer.')->middleware('customer.token')->gro
 | Ztracený odkaz
 |--------------------------------------------------------------------------
 */
-Route::get('/obnovit', [RecoverController::class, 'create'])->name('recover');
-Route::post('/obnovit', [RecoverController::class, 'store'])->middleware('throttle:5,1')->name('recover.store');
-Route::get('/obnovit/{customer}', [RecoverController::class, 'show'])->middleware('signed')->name('recover.claim');
-Route::post('/obnovit/{customer}', [RecoverController::class, 'claim'])->middleware('signed')->name('recover.claim.store');
+Route::get('/obnovit', RecoverController::class)->name('recover');
 
 /*
 |--------------------------------------------------------------------------
@@ -72,7 +70,7 @@ Route::post('/obnovit/{customer}', [RecoverController::class, 'claim'])->middlew
 */
 Route::prefix('admin')->name('admin.')->group(function () {
     // Manifest si prohlížeč stahuje bez přihlášení.
-    Route::get('/manifest.webmanifest', [PwaController::class, 'adminManifest'])->name('manifest');
+    Route::get('/manifest.webmanifest', [PwaController::class, 'adminManifest'])->middleware('background')->name('manifest');
 
     Route::middleware('guest')->group(function () {
         Route::get('/login', [LoginController::class, 'create'])->name('login');

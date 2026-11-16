@@ -49,24 +49,51 @@ class DatabaseSeeder extends Seeder
                 'email' => 'petra@example.com',
                 'password' => 'heslo123',
                 'role' => UserRole::Owner,
-                'color' => '#B97D80',
+                'color' => '#74624F',
+                'is_bookable' => true,
+            ]);
+
+            // Druhá kadeřnice: vlastní pracovní doba, nedělá melír.
+            $lucie = User::create([
+                'salon_id' => $salon->id,
+                'name' => 'Lucie',
+                'email' => 'lucie@example.com',
+                'password' => 'heslo123',
+                'role' => UserRole::Staff,
+                'color' => '#A8875E',
                 'is_bookable' => true,
             ]);
 
             $services = $this->services($salon, $petra);
-            $this->workingHours($petra);
+            $lucie->services()->attach($services->reject(fn (Service $service) => $service->name === 'Melír a střih')->pluck('id')->all());
+
+            $this->workingHours($petra, [
+                1 => [['09:00', '12:00'], ['13:00', '17:00']],
+                2 => [['09:00', '12:00'], ['13:00', '17:00']],
+                3 => [['09:00', '12:00'], ['13:00', '17:00']],
+                4 => [['12:00', '19:00']],
+                5 => [['09:00', '12:00'], ['13:00', '16:00']],
+            ]);
+            $this->workingHours($lucie, [
+                1 => [['10:00', '13:00'], ['14:00', '18:00']],
+                2 => [['10:00', '13:00'], ['14:00', '18:00']],
+                4 => [['08:00', '12:00'], ['13:00', '16:00']],
+                5 => [['08:00', '14:00']],
+                6 => [['09:00', '12:00']],
+            ]);
 
             $customers = Customer::factory()->count(20)->create(['salon_id' => $salon->id]);
 
-            $this->bookings($salon, $petra, $services, $customers);
+            $this->bookings($salon, $petra, $services, $customers, perDay: [2, 4]);
+            $this->bookings($salon, $lucie, $lucie->services()->orderBy('sort')->get(), $customers, perDay: [1, 3]);
 
             $demo = $customers->first();
-            $demo->update(['name' => 'Jana Nováková', 'email' => 'jana@example.com', 'color_recipe' => 'Wella Koleston 7/1 + 6 % oxidant, 40 min']);
+            $demo->update(['name' => 'Jana Nováková', 'color_recipe' => 'Wella Koleston 7/1 + 6 % oxidant, 40 min']);
             $token = CustomerAccessToken::issue($demo);
 
             $this->command?->newLine();
             $this->command?->info('Ukázková data jsou připravena.');
-            $this->command?->line('  Administrace:  '.url('/admin').'  (petra@example.com / heslo123)');
+            $this->command?->line('  Administrace:  '.url('/admin').'  (petra@example.com / heslo123, druhá kadeřnice lucie@example.com / heslo123)');
             $this->command?->line('  Zákaznice:     '.url('/k/'.$token).'  (Jana Nováková)');
             $this->command?->line('  Veřejný odkaz: '.url('/s/'.$salon->slug));
         });
@@ -105,16 +132,9 @@ class DatabaseSeeder extends Seeder
         });
     }
 
-    private function workingHours(User $staff): void
+    /** @param array<int, list<array{string, string}>> $week den v týdnu (1 = pondělí) → intervaly */
+    private function workingHours(User $staff, array $week): void
     {
-        $week = [
-            1 => [['09:00', '12:00'], ['13:00', '17:00']],
-            2 => [['09:00', '12:00'], ['13:00', '17:00']],
-            3 => [['09:00', '12:00'], ['13:00', '17:00']],
-            4 => [['12:00', '19:00']],
-            5 => [['09:00', '12:00'], ['13:00', '16:00']],
-        ];
-
         foreach ($week as $weekday => $intervals) {
             foreach ($intervals as [$from, $to]) {
                 $staff->workingHours()->create(['weekday' => $weekday, 'starts_at' => $from, 'ends_at' => $to]);
@@ -122,7 +142,8 @@ class DatabaseSeeder extends Seeder
         }
     }
 
-    private function bookings(Salon $salon, User $staff, $services, $customers): void
+    /** @param array{int, int} $perDay nejméně a nejvíc rezervací za den */
+    private function bookings(Salon $salon, User $staff, $services, $customers, array $perDay): void
     {
         $finder = app(SlotFinder::class);
         $manager = app(BookingManager::class);
@@ -131,9 +152,9 @@ class DatabaseSeeder extends Seeder
         for ($offset = -30; $offset <= 21; $offset++) {
             $day = $today->addDays($offset);
 
-            foreach (range(1, random_int(2, 4)) as $ignored) {
+            foreach (range(1, random_int(...$perDay)) as $ignored) {
                 $picked = random_int(1, 5) === 1
-                    ? [$services[0], $services[2]]            // střih + foukaná
+                    ? [$services->firstWhere('name', 'Dámský střih'), $services->firstWhere('name', 'Foukaná')]
                     : [$services->random()];
 
                 $slots = $finder->forDay($salon, $picked, $day, $staff, ignoreLimits: true);

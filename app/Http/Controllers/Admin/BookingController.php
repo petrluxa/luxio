@@ -112,7 +112,6 @@ class BookingController extends AdminController
             'customer_id' => ['nullable', 'integer'],
             'customer_name' => ['required_without:customer_id', 'nullable', 'string', 'min:2', 'max:100'],
             'customer_phone' => ['nullable', 'string'],
-            'customer_email' => ['nullable', 'string', 'email', 'max:190'],
         ], ['customer_name.required_without' => 'Vyberte zákaznici, nebo zadejte jméno nové.']);
 
         try {
@@ -123,7 +122,6 @@ class BookingController extends AdminController
                         'salon_id' => $salon->id,
                         'name' => trim($data['customer_name']),
                         'phone' => $data['customer_phone'] ?? null,
-                        'email' => isset($data['customer_email']) ? mb_strtolower($data['customer_email']) : null,
                         'preferred_staff_id' => $selection->staff?->id,
                         'is_verified' => true, // přidala ji kadeřnice
                     ]);
@@ -157,21 +155,21 @@ class BookingController extends AdminController
 
     public function approve(Booking $booking): RedirectResponse
     {
-        return $this->act($booking, fn (Booking $b) => $this->manager->approve($b), 'Rezervace je potvrzená.');
+        return $this->act($booking, fn (Booking $b) => $this->manager->approve($b), 'Rezervace je potvrzená.', tellCustomer: true);
     }
 
     public function reject(Request $request, Booking $booking): RedirectResponse
     {
         $reason = $this->reason($request);
 
-        return $this->act($booking, fn (Booking $b) => $this->manager->reject($b, $reason), 'Rezervace je zamítnutá.');
+        return $this->act($booking, fn (Booking $b) => $this->manager->reject($b, $reason), 'Rezervace je zamítnutá.', tellCustomer: true);
     }
 
     public function cancel(Request $request, Booking $booking): RedirectResponse
     {
         $reason = $this->reason($request);
 
-        return $this->act($booking, fn (Booking $b) => $this->manager->cancelByStaff($b, $reason), 'Rezervace je zrušená.');
+        return $this->act($booking, fn (Booking $b) => $this->manager->cancelByStaff($b, $reason), 'Rezervace je zrušená.', tellCustomer: true);
     }
 
     public function noShow(Booking $booking): RedirectResponse
@@ -235,10 +233,10 @@ class BookingController extends AdminController
             return back()->withInput()->with('error', $e->getMessage());
         }
 
-        return redirect()->route('admin.bookings.show', $booking)->with('status', 'Termín je přesunutý.');
+        return redirect()->route('admin.bookings.show', $booking)->with('status', 'Termín je přesunutý.'.$this->customerHint($booking));
     }
 
-    private function act(Booking $booking, Closure $action, string $message): RedirectResponse
+    private function act(Booking $booking, Closure $action, string $message, bool $tellCustomer = false): RedirectResponse
     {
         try {
             $action($this->ownBooking($booking));
@@ -246,7 +244,18 @@ class BookingController extends AdminController
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('status', $message);
+        return back()->with('status', $message.($tellCustomer ? $this->customerHint($booking) : ''));
+    }
+
+    /**
+     * Dozví se zákaznice o změně sama? Upozornění chodí jen na telefon (žádné e-maily ani SMS),
+     * takže bez zapnutých upozornění jí musí dát vědět kadeřnice.
+     */
+    private function customerHint(Booking $booking): string
+    {
+        return $booking->customer->reachableByPush()
+            ? ' Zákaznici jde upozornění na telefon.'
+            : ' Zákaznice nemá zapnutá upozornění – dejte jí prosím vědět sama.';
     }
 
     private function reason(Request $request): ?string
