@@ -480,17 +480,626 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Kalendář v administraci (den / týden)
+   Administrace: horní lišta, boxíky a rozvrh (den / týden)
    --------------------------------------------------------------------------- */
+:root {
+    --top-h: 61px; /* výška horní lišty včetně linky – pod ní se drží záhlaví rozvrhu */
+}
+
 @layer components {
+    /* Horní lišta: velký název salonu, na počítači hlavní nabídka */
+    .top-bar {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        background: var(--card);
+        border-bottom: 1px solid var(--border);
+        padding-top: env(safe-area-inset-top);
+    }
+
+    .top-bar-inner {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        max-width: 1720px;
+        height: 60px;
+        margin: 0 auto;
+        padding: 0 18px;
+    }
+
+    .top-brand {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        margin-right: auto;
+        line-height: 1.15;
+        color: var(--text);
+    }
+
+    .top-brand b {
+        overflow: hidden;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .top-brand span {
+        overflow: hidden;
+        font-size: 12px;
+        color: var(--muted);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .top-nav {
+        display: none;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .top-btn {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 14px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 600;
+        white-space: nowrap;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .top-btn:hover {
+        border-color: var(--link);
+    }
+
+    .top-btn.is-on {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: var(--on-primary);
+    }
+
+    .top-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 10px;
+        background: var(--primary);
+        color: var(--on-primary);
+        font-size: 12px;
+    }
+
+    .top-btn.is-on .top-badge {
+        background: var(--on-primary);
+        color: var(--primary);
+    }
+
+    .top-user {
+        position: relative;
+    }
+
+    .top-user > summary {
+        list-style: none;
+    }
+
+    .top-user > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .top-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 50;
+        display: grid;
+        gap: 2px;
+        min-width: 210px;
+        padding: 6px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--card);
+    }
+
+    .top-menu a,
+    .top-menu button {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        min-height: 44px;
+        padding: 0 12px;
+        border-radius: 10px;
+        color: var(--text);
+        font-size: 15px;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .top-menu a:hover,
+    .top-menu button:hover {
+        background: var(--selected);
+    }
+
+    /* Obsah: na telefonu místo dole pro spodní nabídku, na počítači ne */
+    .admin-main {
+        padding-bottom: calc(84px + env(safe-area-inset-bottom));
+        --bar-offset: calc(57px + env(safe-area-inset-bottom));
+        --bar-safe: 0px;
+    }
+
+    @media (min-width: 1024px) {
+        .top-brand b {
+            font-size: 28px;
+        }
+
+        .top-brand span {
+            font-size: 13px;
+        }
+
+        .top-nav {
+            display: flex;
+        }
+
+        .admin-bottom-nav {
+            display: none;
+        }
+
+        .admin-main {
+            padding-bottom: 48px;
+            --bar-offset: 0px;
+        }
+    }
+
+    /* Hlášení po akci se v administraci drží pod horní lištou, i když je stránka posunutá dolů. */
+    .flash-sticky {
+        position: sticky;
+        top: calc(var(--top-h) + 8px);
+        z-index: 30;
+        cursor: pointer;
+    }
+
+    /* Malý chip (ovládání rozvrhu) */
+    .chip-sm {
+        height: 36px;
+        padding: 0 13px;
+        border-radius: 12px;
+        font-size: 14px;
+    }
+
+    .chip-sm::after {
+        inset: -4px 0;
+    }
+
+    /* Boxíky v Adminu */
+    .tiles {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    @media (min-width: 640px) {
+        .tiles {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .tiles {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    .tile {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        min-height: 92px;
+        padding: 16px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text);
+    }
+
+    .tile:hover {
+        border-color: var(--link);
+    }
+
+    .tile-icon {
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 46px;
+        height: 46px;
+        border-radius: 13px;
+        background: var(--banner);
+        color: var(--banner-text);
+    }
+
+    .tile-main {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .tile-main b {
+        display: block;
+        font-size: 17px;
+        font-weight: 600;
+    }
+
+    .tile-main span {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+    }
+
+    .tile-count {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        height: 28px;
+        padding: 0 9px;
+        border-radius: 14px;
+        background: var(--primary);
+        color: var(--on-primary);
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    /* Okno s potvrzením (přetažení rezervace) */
+    .sheet {
+        width: min(420px, calc(100vw - 36px));
+        margin: auto;
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text);
+    }
+
+    .sheet::backdrop {
+        background: rgb(0 0 0 / 0.4);
+    }
+
+    /* Horní panel rozvrhu: vlevo měsíční kalendář, uprostřed den a přepínače */
+    .sched-top {
+        display: grid;
+        gap: 14px;
+        margin-bottom: 14px;
+        padding: 14px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: var(--card);
+    }
+
+    .sched-head {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        order: -1; /* na telefonu je den nahoře a kalendář se rozbaluje pod ním */
+        min-width: 0;
+        text-align: center;
+    }
+
+    .sched-day {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .sched-day h1 {
+        min-width: 104px;
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: -0.01em;
+    }
+
+    .sched-date {
+        margin-top: -6px;
+        font-size: 14px;
+        color: var(--muted);
+    }
+
+    .sched-arrow {
+        position: relative;
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 11px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text);
+        font-size: 18px;
+        line-height: 1;
+    }
+
+    .sched-arrow::after {
+        content: '';
+        position: absolute;
+        inset: -4px;
+    }
+
+    .sched-arrow:hover {
+        border-color: var(--link);
+    }
+
+    .mini-cal {
+        display: none;
+        padding: 10px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+    }
+
+    .mini-cal.is-open {
+        display: block;
+    }
+
+    .mini-cal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 6px;
+    }
+
+    .mini-cal-head b {
+        font-size: 15px;
+        font-weight: 700;
+    }
+
+    .mini-cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 3px;
+    }
+
+    .mini-cal-dow {
+        padding: 2px 0;
+        font-size: 11px;
+        color: var(--muted);
+        text-align: center;
+        text-transform: uppercase;
+    }
+
+    .mini-day {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 42px;
+        border-radius: 9px;
+        background: var(--card);
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    .mini-day:hover {
+        background: var(--selected);
+    }
+
+    .mini-day.is-out {
+        color: var(--muted);
+        font-weight: 400;
+        opacity: 0.5;
+    }
+
+    .mini-day.is-today {
+        box-shadow: inset 0 0 0 2px var(--link);
+    }
+
+    .mini-day.is-on {
+        background: var(--primary);
+        color: var(--on-primary);
+    }
+
+    .mini-day.has-bookings::after {
+        content: '';
+        position: absolute;
+        bottom: 4px;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--link);
+    }
+
+    .mini-day.is-on::after {
+        background: var(--on-primary);
+    }
+
+    @media (min-width: 900px) {
+        .sched-top {
+            grid-template-columns: 300px minmax(0, 1fr);
+            align-items: center;
+            padding: 16px;
+        }
+
+        .sched-head {
+            order: 0;
+        }
+
+        .sched-day h1 {
+            font-size: 34px;
+        }
+
+        .mini-cal {
+            display: block;
+        }
+
+        .mini-cal-toggle {
+            display: none;
+        }
+
+        .mini-day {
+            height: 32px;
+            font-size: 13px;
+        }
+    }
+
+    /* Mřížka rozvrhu. Na telefonu se víc sloupců posouvá do strany (osa času zůstává na místě),
+       na počítači se posouvá jen celá stránka a záhlaví sloupců se drží pod horní lištou. */
+    .cal-scroll {
+        overflow-x: auto;
+        overflow-y: hidden;
+        margin: 0 -18px;
+        padding: 0 18px;
+        -webkit-overflow-scrolling: touch;
+    }
+
     .cal {
         display: grid;
-        grid-template-columns: 44px minmax(0, 1fr);
-        padding-top: 8px;
+        grid-template-columns: 52px repeat(var(--cal-cols, 1), minmax(132px, 1fr));
+        /* Úzký pruh vpravo od rezervací zůstává volný – kliknutím se přidá další zákaznice na stejný čas. */
+        --cal-gutter: 18px;
     }
 
     .cal-week {
-        grid-template-columns: 36px repeat(7, minmax(0, 1fr));
+        grid-template-columns: 48px repeat(7, minmax(84px, 1fr));
+        --cal-gutter: 1px;
+    }
+
+    @media (min-width: 1024px) {
+        .cal-scroll {
+            overflow: visible;
+            margin: 0;
+            padding: 0;
+        }
+
+        .cal {
+            grid-template-columns: 64px repeat(var(--cal-cols, 1), minmax(0, 1fr));
+        }
+
+        .cal-week {
+            grid-template-columns: 64px repeat(7, minmax(0, 1fr));
+        }
+
+    }
+
+    /* Záhlaví: pruh se jmény kadeřnic (v týdnu se dny) */
+    .cal-corner,
+    .cal-staff,
+    .cal-head {
+        position: sticky;
+        /* Na telefonu se mřížka posouvá do strany ve vlastním rámci – tam záhlaví zůstává nahoře v něm.
+           Na počítači se drží pod horní lištou (viz níže). */
+        top: 0;
+        z-index: 6;
+        min-height: 54px;
+        background: var(--banner);
+        color: var(--banner-text);
+    }
+
+    @media (min-width: 1024px) {
+        .cal-corner,
+        .cal-staff,
+        .cal-head {
+            top: var(--top-h);
+        }
+    }
+
+    .cal-corner {
+        left: 0;
+        z-index: 7;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-top-left-radius: 14px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 1;
+    }
+
+    .cal-staff {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 6px 6px 10px;
+        border-left: 1px solid color-mix(in srgb, var(--banner-text) 22%, transparent);
+    }
+
+    .cal > .cal-staff:last-of-type,
+    .cal > .cal-head:last-of-type {
+        border-top-right-radius: 14px;
+    }
+
+    .cal-staff-dot {
+        flex: none;
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--banner-text) 70%, transparent);
+    }
+
+    .cal-staff-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        line-height: 1.2;
+    }
+
+    .cal-staff-name b,
+    .cal-staff-name span {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .cal-staff-name b {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .cal-staff-name span {
+        font-size: 12px;
+        opacity: 0.8;
+    }
+
+    .cal-add {
+        position: relative;
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 11px;
+        background: color-mix(in srgb, var(--banner-text) 16%, transparent);
+        color: var(--banner-text);
+    }
+
+    .cal-add:hover {
+        background: var(--primary);
+        color: var(--on-primary);
+    }
+
+    .cal-add::after {
+        content: '';
+        position: absolute;
+        inset: -4px;
     }
 
     .cal-head {
@@ -498,41 +1107,63 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        min-height: 44px;
-        margin-bottom: 10px;
-        font-size: 12px;
+        border-left: 1px solid color-mix(in srgb, var(--banner-text) 22%, transparent);
         line-height: 1.2;
-        color: var(--muted);
+        text-align: center;
     }
 
     .cal-head b {
-        font-size: 15px;
-        font-weight: 600;
-        color: var(--text);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
     }
 
-    .cal-head.is-today b {
-        color: var(--link);
+    .cal-head span {
+        font-size: 11px;
+        opacity: 0.8;
     }
 
+    .cal-head.is-today {
+        background: var(--primary);
+        color: var(--on-primary);
+    }
+
+    /* Osa času: řádek = půl hodiny */
     .cal-hours {
-        position: relative;
+        position: sticky;
+        left: 0;
+        z-index: 4;
+        border-bottom: 1px solid var(--border);
+        border-left: 1px solid var(--border);
+        background: var(--card);
     }
 
     .cal-hour {
         position: absolute;
+        right: 0;
         left: 0;
-        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: var(--cal-half);
+        border-top: 1px solid var(--border);
+        color: var(--text);
         font-size: 12px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .cal-hour.is-half {
         color: var(--muted);
     }
 
-    /* Sloupec dne: mimo pracovní dobu ztlumené pozadí, v pracovní době barva karty. */
+    /* Sloupec: mimo pracovní dobu ztlumené pozadí, v pracovní době barva karty. */
     .cal-col {
         position: relative;
         overflow: hidden;
+        border-bottom: 1px solid var(--border);
         border-left: 1px solid var(--border);
-        background: color-mix(in srgb, var(--border) 45%, var(--bg));
+        background: color-mix(in srgb, var(--border) 55%, var(--bg));
     }
 
     .cal-col:last-child {
@@ -541,23 +1172,20 @@
 
     .cal-open {
         position: absolute;
-        left: 0;
         right: 0;
+        left: 0;
         background: var(--card);
-    }
-
-    .cal-line {
-        position: absolute;
-        left: 0;
-        right: 0;
-        border-top: 1px solid var(--border);
-        pointer-events: none;
     }
 
     .cal-slot {
         position: absolute;
-        left: 0;
         right: 0;
+        left: 0;
+        border-top: 1px solid var(--border);
+    }
+
+    .cal-slot.is-half {
+        border-top-color: color-mix(in srgb, var(--border) 55%, transparent);
     }
 
     .cal-slot:hover,
@@ -565,48 +1193,91 @@
         background: var(--selected);
     }
 
+    /* Rezervace. Vodorovnou polohu a šířku určuje šablona (pruhy při souběhu dvou zákaznic). */
     .cal-block {
         position: absolute;
-        left: 2px;
-        right: 2px;
         z-index: 2;
         overflow: hidden;
-        padding: 2px 6px;
         border-radius: 8px;
-        border-left: 3px solid var(--link);
-        background: var(--selected);
-        color: var(--text);
+        border-left: 4px solid var(--staff, var(--link));
+        background: var(--primary);
+        color: var(--on-primary);
         font-size: 12px;
         line-height: 1.25;
+        user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-user-drag: none;
+    }
+
+    .cal-block[data-draggable] {
+        cursor: grab;
+    }
+
+    .cal-block-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+        overflow: hidden;
+        padding: 1px 6px;
+        background: color-mix(in srgb, #fff 38%, var(--primary));
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .cal-block-head i {
+        font-style: normal;
+        font-weight: 400;
     }
 
     .cal-block b {
         display: block;
-        font-size: 13px;
-        font-weight: 600;
-        white-space: nowrap;
         overflow: hidden;
+        padding: 1px 6px 0;
+        font-size: 13px;
+        font-weight: 700;
         text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
-    .cal-block span {
+    .cal-block-meta {
         display: block;
-        color: var(--muted);
-        white-space: nowrap;
         overflow: hidden;
+        padding: 0 6px;
+        opacity: 0.85;
         text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .cal-week .cal-block {
-        padding: 2px 3px;
-        border-left-width: 2px;
+        border-left-width: 3px;
         border-radius: 6px;
         font-size: 11px;
     }
 
+    .cal-week .cal-block b {
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    /* Čeká na schválení */
     .cal-block.is-pending {
         background: var(--banner);
+        color: var(--banner-text);
         border-left-style: dashed;
+    }
+
+    .cal-block.is-pending .cal-block-head {
+        background: color-mix(in srgb, #fff 14%, var(--banner));
+    }
+
+    /* Proběhlá nebo zaplacená */
+    .cal-block.is-done {
+        background: color-mix(in srgb, var(--muted) 24%, var(--card));
+        color: var(--text);
+    }
+
+    .cal-block.is-done .cal-block-head {
+        background: color-mix(in srgb, var(--muted) 38%, var(--card));
     }
 
     .cal-block.is-no-show {
@@ -614,10 +1285,30 @@
         text-decoration: line-through;
     }
 
+    .cal-block.is-dragging {
+        opacity: 0.3;
+    }
+
+    /* Obrys přetahované rezervace na novém místě */
+    .cal-ghost {
+        position: absolute;
+        right: var(--cal-gutter);
+        left: 2px;
+        z-index: 5;
+        overflow: hidden;
+        padding: 2px 6px;
+        border-radius: 8px;
+        border: 2px dashed var(--link);
+        background: color-mix(in srgb, var(--primary) 60%, transparent);
+        color: var(--on-primary);
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+
     .cal-pause {
         position: absolute;
-        left: 2px;
-        right: 2px;
         z-index: 1;
         overflow: hidden;
         padding: 2px 6px;
@@ -630,8 +1321,6 @@
 
     .cal-buffer {
         position: absolute;
-        left: 2px;
-        right: 2px;
         z-index: 1;
         border-radius: 4px;
         background: color-mix(in srgb, var(--muted) 22%, transparent);
@@ -640,10 +1329,98 @@
 
     .cal-now {
         position: absolute;
-        left: 0;
         right: 0;
+        left: 0;
         z-index: 3;
         border-top: 2px solid var(--danger);
         pointer-events: none;
     }
+}
+
+@layer components {
+    /* Ceník kadeřnice: řádek = služba, zaškrtnutí „dělám“ a vlastní cena a délky */
+    .price-row {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 8px;
+        padding: 14px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--card);
+    }
+
+    .price-row.is-off {
+        background: transparent;
+    }
+
+    .price-row-name {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        min-height: 44px;
+        cursor: pointer;
+    }
+
+    .price-row-name input {
+        flex: none;
+        width: 22px;
+        height: 22px;
+        margin-top: 2px;
+        accent-color: var(--link);
+    }
+
+    .price-row-name b {
+        display: block;
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .price-row-name span span {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+    }
+
+    .price-row-fields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .price-row-fields .field {
+        margin-bottom: 0;
+    }
+
+    .price-row-tools {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px;
+    }
+
+    .price-row .field-error {
+        grid-column: 1 / -1;
+    }
+
+    @media (min-width: 900px) {
+        .price-row {
+            grid-template-columns: minmax(220px, 1.1fr) minmax(0, 2.4fr) auto;
+            align-items: center;
+        }
+
+        .price-row-fields {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .price-row-tools {
+            grid-column: 3;
+        }
+    }
+}
+
+/* Při tažení rezervace se nesmí označovat text a kurzor zůstává „chycený“. */
+html.is-dragging-booking,
+html.is-dragging-booking * {
+    cursor: grabbing !important;
+    user-select: none !important;
 }

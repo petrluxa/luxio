@@ -69,7 +69,7 @@ class CustomerController extends AdminController
             'tab' => 'customers',
             'customer' => $customer,
             'staffList' => $this->staffList(),
-            'bookings' => $customer->bookings()->with('items', 'staff')->orderByDesc('starts_at')->limit(60)->get(),
+            'bookings' => $customer->bookings()->with('items', 'staff', 'products')->orderByDesc('starts_at')->limit(60)->get(),
             'activeTokens' => $customer->accessTokens()->whereNull('revoked_at')->count(),
             // Čerstvě vydaný odkaz se ukáže jen jednou – nikde není uložený.
             'link' => session('link'),

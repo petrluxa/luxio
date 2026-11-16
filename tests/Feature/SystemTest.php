@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Notification;
 
 describe('instalace přes prohlížeč', function () {
     $form = fn (array $overrides = []) => $overrides + [
-        'name' => 'Kadeřnictví Eva', 'slug' => 'Eva', 'owner' => 'Eva', 'email' => 'Eva@Example.com', 'password' => 'dlouhe-heslo-123',
+        'name' => 'Kadeřnictví Eva', 'owner' => 'Eva', 'login' => 'Eva', 'password' => 'dlouhe-heslo-123', 'staff' => "Sabina\nŠárka\n",
     ];
 
     test('bez klíče v nastavení ani se špatným klíčem adresa neexistuje', function () use ($form) {
@@ -38,31 +38,58 @@ describe('instalace přes prohlížeč', function () {
             ->assertHeader('X-Robots-Tag', 'noindex, nofollow');
     });
 
-    test('formulář založí salon a majitelku s heslem, které si zvolila', function () use ($form) {
+    test('formulář založí salon, správce s heslem, které si zvolil, a kadeřnice v rozvrhu', function () use ($form) {
         config(['luxio.setup_key' => 'tajny-klic']);
 
         $this->post('/instalace/tajny-klic', $form())->assertOk()
             ->assertSee('Salon je založený')
-            ->assertSee('/s/eva')
+            ->assertSee('/s/kadernictvi-eva')
+            ->assertSee('/admin/login?jmeno=eva')
             ->assertDontSee('dlouhe-heslo-123');
 
-        $eva = User::sole();
+        $salon = Salon::sole();
+        $eva = User::where('login', 'eva')->sole();
 
-        expect(Salon::sole())->name->toBe('Kadeřnictví Eva')->slug->toBe('eva')
-            ->and($eva)->email->toBe('eva@example.com')->role->toBe(UserRole::Owner)->is_bookable->toBeTrue()
-            ->and(Hash::check('dlouhe-heslo-123', $eva->password))->toBeTrue();
+        expect($salon)->name->toBe('Kadeřnictví Eva')->slug->toBe('kadernictvi-eva')
+            // Správce s kadeřnicemi je recepce: zákaznice se k němu neobjednávají.
+            ->and($eva)->role->toBe(UserRole::Owner)->is_bookable->toBeFalse()
+            ->and(Hash::check('dlouhe-heslo-123', $eva->password))->toBeTrue()
+            ->and($salon->staff()->pluck('name')->all())->toBe(['Sabina', 'Šárka'])
+            ->and($salon->staff()->get()->every(fn (User $u) => ! $u->canLogIn() && $u->workingHours()->count() === 5 && $u->services()->count() > 0))->toBeTrue()
+            // Vzorový ceník a katalog přípravků, ať jde aplikace hned vyzkoušet.
+            ->and($salon->services()->count())->toBeGreaterThan(3)
+            ->and($salon->products()->count())->toBeGreaterThan(100);
 
-        // Přihlášení do administrace funguje hned.
-        $this->post('/admin/login', ['email' => 'eva@example.com', 'password' => 'dlouhe-heslo-123'])->assertRedirect('/admin');
+        // Přihlášení do administrace funguje hned a vede na rozvrh.
+        $this->post('/admin/login', ['login' => 'eva', 'password' => 'dlouhe-heslo-123'])->assertRedirect('/admin');
+        $this->get('/admin')->assertRedirect('/admin/kalendar');
+        $this->get('/admin/kalendar')->assertOk()->assertSee('Sabina')->assertSee('Šárka');
+
+        // Stránka pro zákaznice má z čeho nabízet: služby i obě kadeřnice.
+        $this->get('/s/kadernictvi-eva')->assertOk();
+
+        $options = app(App\Services\Booking\BookingWizard::class)->options($salon);
+
+        expect(array_column($options['services'], 'name'))->toContain('Dámský střih')
+            ->and(array_column($options['staff'], 'name'))->toBe(['Sabina', 'Šárka']);
+    });
+
+    test('bez kadeřnic je salonem jedné kadeřnice sám správce', function () use ($form) {
+        config(['luxio.setup_key' => 'tajny-klic']);
+
+        $this->post('/instalace/tajny-klic', $form(['staff' => '']))->assertOk()->assertSee('Salon je založený');
+
+        expect(User::sole())->login->toBe('eva')->is_bookable->toBeTrue()
+            ->and(User::sole()->workingHours()->count())->toBe(5);
     });
 
     test('krátké heslo nebo špatné údaje salon nezaloží a heslo se do stránky nevrací', function () use ($form) {
         config(['luxio.setup_key' => 'tajny-klic']);
 
-        $this->post('/instalace/tajny-klic', $form(['slug' => 'má mezery', 'email' => 'neplatny', 'password' => 'kratke']))
+        $this->post('/instalace/tajny-klic', $form(['login' => 'má mezery', 'password' => 'kratke']))
             ->assertStatus(422)
             ->assertSee('Založit salon')
-            ->assertSee('Adresa smí obsahovat jen malá písmena')
+            ->assertSee('Přihlašovací jméno smí mít 3–60 znaků')
             ->assertDontSee('kratke');
 
         expect(Salon::count())->toBe(0)->and(User::count())->toBe(0);
@@ -70,12 +97,85 @@ describe('instalace přes prohlížeč', function () {
 
     test('jakmile salon existuje, další účet už přes instalaci nikdo nezaloží', function () use ($form) {
         config(['luxio.setup_key' => 'tajny-klic']);
-        Salon::factory()->create(['name' => 'První salon']);
+        [$salon, $petra] = salonWithStaff();
+        staffMember($salon);
+        service($salon);
 
-        $this->get('/instalace/tajny-klic')->assertOk()->assertSee('Salon už existuje')->assertDontSee('name="password"', false);
+        $this->get('/instalace/tajny-klic')->assertOk()->assertSee('Salon už existuje')
+            ->assertDontSee('name="password"', false)->assertDontSee('Dovybavit salon');
         $this->post('/instalace/tajny-klic', $form())->assertOk()->assertSee('Salon už existuje');
 
-        expect(Salon::count())->toBe(1)->and(User::count())->toBe(0);
+        expect(Salon::count())->toBe(1)->and(User::count())->toBe(2)->and($petra->fresh()->is_bookable)->toBeTrue();
+    });
+
+    test('prázdný salon ze starší instalace jde jednou dovybavit: kadeřnice, ceník, pracovní doba a přípravky', function () {
+        config(['luxio.setup_key' => 'tajny-klic']);
+        $salon = Salon::factory()->create(['name' => 'Starý salon']);
+        $owner = User::factory()->owner()->create(['salon_id' => $salon->id, 'name' => 'Petr', 'login' => 'petr@example.com']);
+
+        $this->get('/instalace/tajny-klic')->assertOk()->assertSee('Salon už existuje')->assertSee('Dovybavit salon')
+            ->assertDontSee('name="password"', false)->assertDontSee('name="login"', false);
+
+        // Přihlašovací údaje se touto cestou založit nedají, ani když je někdo pošle.
+        $this->post('/instalace/tajny-klic', ['staff' => "Sabina\nŠárka", 'login' => 'vetrelec', 'password' => 'tajne-heslo-123', 'owner' => 'Vetřelec'])
+            ->assertOk()->assertSee('Doplněno')->assertDontSee('Dovybavit salon');
+
+        expect($salon->staff()->pluck('name')->all())->toBe(['Sabina', 'Šárka'])
+            ->and(User::whereNotNull('login')->pluck('login')->all())->toBe(['petr@example.com'])
+            // Zakladatel je teď správce bez vlastních zákaznic a jeho přihlášení se nezměnilo.
+            ->and($owner->fresh())->is_bookable->toBeFalse()->role->toBe(UserRole::Owner)
+            ->and($salon->services()->count())->toBeGreaterThan(3)
+            ->and($salon->products()->count())->toBeGreaterThan(100)
+            ->and($salon->staff()->get()->every(fn (User $u) => $u->workingHours()->count() === 5 && $u->services()->count() > 0))->toBeTrue();
+
+        // Jakmile má salon ceník i kadeřnice, podruhé už nic nepřidá.
+        $counts = [User::count(), $salon->services()->count(), $salon->products()->count()];
+        $this->post('/instalace/tajny-klic', ['staff' => 'Další'])->assertOk()->assertDontSee('Doplněno');
+
+        expect([User::count(), $salon->services()->count(), $salon->products()->count()])->toBe($counts);
+
+        // Původní přihlášení e-mailem funguje dál jako přihlašovací jméno.
+        $this->post('/admin/login', ['login' => 'Petr@Example.com', 'password' => 'password'])->assertRedirect('/admin');
+    });
+
+    test('salonu jen se zakladatelem jdou kadeřnice doplnit, i když už ceník má', function () {
+        config(['luxio.setup_key' => 'tajny-klic']);
+        [$salon, $martina] = salonWithStaff();
+        $martina->update(['role' => UserRole::Owner, 'name' => 'Martina']);
+        $cut = service($salon);
+
+        $this->get('/instalace/tajny-klic')->assertOk()->assertSee('Dovybavit salon');
+        $this->post('/instalace/tajny-klic', ['staff' => "Sabina\nŠárka"])->assertOk()->assertSee('Doplněno');
+
+        expect($salon->staff()->pluck('name')->all())->toBe(['Sabina', 'Šárka'])
+            ->and($martina->fresh()->is_bookable)->toBeFalse()
+            // Ceník zůstal, jak byl, a nové kadeřnice ho dostaly.
+            ->and($salon->services()->pluck('id')->all())->toBe([$cut->id])
+            ->and($salon->staff()->get()->every(fn (User $u) => $u->services()->pluck('services.id')->all() === [$cut->id]))->toBeTrue();
+    });
+
+    test('jména v poškozeném kódování se nepřidají', function () {
+        config(['luxio.setup_key' => 'tajny-klic']);
+        $salon = Salon::factory()->create();
+        User::factory()->owner()->create(['salon_id' => $salon->id]);
+
+        $this->post('/instalace/tajny-klic', ['staff' => "Sabina\n\x8A\xE1rka"])->assertOk();
+
+        expect(User::count())->toBe(1);
+    });
+
+    test('salon s rezervacemi se dovybavit nedá, i kdyby neměl ceník', function () {
+        config(['luxio.setup_key' => 'tajny-klic']);
+        $this->travelTo(TEST_NOW);
+        [$salon, $petra] = salonWithStaff();
+        $cut = service($salon);
+        app(BookingManager::class)->create(customer($salon), [$cut], at('10:00'), $petra);
+        $salon->services()->delete();
+
+        $this->get('/instalace/tajny-klic')->assertOk()->assertDontSee('Dovybavit salon');
+        $this->post('/instalace/tajny-klic', ['staff' => 'Sabina'])->assertOk()->assertDontSee('Doplněno');
+
+        expect(User::count())->toBe(1)->and($salon->services()->count())->toBe(0);
     });
 });
 

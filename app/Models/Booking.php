@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\BookingSource;
 use App\Enums\BookingStatus;
+use App\Enums\PaymentMethod;
 use App\Services\Availability\EffectiveService;
 use App\Services\Availability\ServicePlan;
 use App\Support\Cz;
@@ -17,7 +18,7 @@ class Booking extends Model
     protected $fillable = [
         'salon_id', 'staff_id', 'customer_id', 'starts_at', 'ends_at', 'status', 'total_price',
         'customer_note', 'staff_note', 'source', 'reminder_sent_at', 'second_reminder_sent_at',
-        'cancelled_at', 'cancel_reason',
+        'cancelled_at', 'cancel_reason', 'paid_amount', 'payment_method', 'paid_at', 'receipt_number',
     ];
 
     protected function casts(): array
@@ -28,6 +29,9 @@ class Booking extends Model
             'status' => BookingStatus::class,
             'source' => BookingSource::class,
             'total_price' => 'integer',
+            'paid_amount' => 'integer',
+            'payment_method' => PaymentMethod::class,
+            'paid_at' => 'immutable_datetime',
             'reminder_sent_at' => 'datetime',
             'second_reminder_sent_at' => 'datetime',
             'cancelled_at' => 'datetime',
@@ -57,6 +61,34 @@ class Booking extends Model
     public function segments(): HasMany
     {
         return $this->hasMany(BookingSegment::class)->orderBy('starts_at');
+    }
+
+    /** Přípravky, které kadeřnice při návštěvě použila. */
+    public function products(): HasMany
+    {
+        return $this->hasMany(BookingProduct::class)->orderBy('sequence')->orderBy('id');
+    }
+
+    public function isPaid(): bool
+    {
+        return $this->paid_amount !== null && $this->paid_at !== null;
+    }
+
+    /**
+     * Kód v adrese dokladu o zaplacení. Počítá se z klíče aplikace, nikde se neukládá
+     * a nedá se uhodnout – kdo nemá odkaz, doklad neotevře.
+     */
+    public function receiptCode(): string
+    {
+        return substr(hash_hmac('sha256', 'doklad|'.$this->id.'|'.$this->receipt_number, (string) config('app.key')), 0, 32);
+    }
+
+    /** Adresa dokladu ke sdílení (WhatsApp, Messenger), nebo null, dokud není zaplaceno. */
+    public function receiptUrl(): ?string
+    {
+        return $this->isPaid() && $this->receipt_number
+            ? route('receipt', ['booking' => $this->id, 'code' => $this->receiptCode()])
+            : null;
     }
 
     /** Budoucí termíny, které ještě platí (čekající i potvrzené). */

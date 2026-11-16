@@ -23,10 +23,14 @@ class BookingNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
+    /**
+     * @param  bool  $withStaff  upozornění pro správce salonu (recepci): v textu je i jméno kadeřnice
+     */
     public function __construct(
         public Booking $booking,
         public BookingNotice $notice,
         public ?CarbonImmutable $previousStart = null,
+        public bool $withStaff = false,
     ) {}
 
     /**
@@ -84,6 +88,7 @@ class BookingNotification extends Notification implements ShouldQueue
         $reason = $b->cancel_reason ? ' – '.$b->cancel_reason : '';
         $name = $b->customer->name;
         $a = Cz::isFemaleName($name) ? 'a' : '';                   // zrušila / zrušil
+        $staff = $this->withStaff ? ' · '.$b->staff->name : '';     // správce vidí, ke komu rezervace patří
 
         return match ($this->notice) {
             BookingNotice::Confirmed => "{$when} – {$b->servicesLabel()}",
@@ -91,10 +96,10 @@ class BookingNotification extends Notification implements ShouldQueue
             BookingNotice::Reminder => $this->lead()." máte termín: {$when} u ".Cz::genitive($b->staff->name),
             BookingNotice::CancelledByStaff => "Váš termín {$when} byl zrušen{$reason}",
             BookingNotice::MovedByStaff => "Váš termín byl přesunut na {$when}".($this->previousStart ? ' (původně '.Cz::dateTime($this->previousStart).')' : ''),
-            BookingNotice::NewBooking => "{$name}, {$short} – {$b->servicesLabel()}",
-            BookingNotice::Pending => ($b->customer->is_verified ? 'Rezervace čeká na schválení: ' : 'Nová zákaznice čeká na schválení: ')."{$name}, {$short}",
-            BookingNotice::CancelledByCustomer => "{$name} zrušil{$a} termín {$short}",
-            BookingNotice::MovedByCustomer => "{$name} přesunul{$a} termín".($this->previousStart ? ' z '.Cz::date($this->previousStart).' '.Cz::time($this->previousStart) : '')." na {$short}",
+            BookingNotice::NewBooking => "{$name}, {$short} – {$b->servicesLabel()}{$staff}",
+            BookingNotice::Pending => ($b->customer->is_verified ? 'Rezervace čeká na schválení: ' : 'Nová zákaznice čeká na schválení: ')."{$name}, {$short}{$staff}",
+            BookingNotice::CancelledByCustomer => "{$name} zrušil{$a} termín {$short}{$staff}",
+            BookingNotice::MovedByCustomer => "{$name} přesunul{$a} termín".($this->previousStart ? ' z '.Cz::date($this->previousStart).' '.Cz::time($this->previousStart) : '')." na {$short}{$staff}",
         };
     }
 

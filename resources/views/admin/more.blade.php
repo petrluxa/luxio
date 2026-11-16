@@ -1,25 +1,55 @@
 @extends('layouts.admin')
 
-@section('title', 'Více')
+@section('title', 'Admin')
+
+@php
+    $me = auth()->user();
+    $owner = $me->isOwner();
+
+    // Boxíky: [adresa, ikona, název, popis, počet]. Co přibude, přidá se sem.
+    $groups = [
+        'Provoz' => [
+            [route('admin.calendar'), 'calendar', 'Rozvrh', 'Den všech kadeřnic, týden, přetahování rezervací', null],
+            [route('admin.pending'), 'pending', 'Ke schválení', 'Rezervace nových zákaznic', ($pendingCount ?? 0) ?: null],
+            [route('admin.customers.index'), 'customers', 'Zákaznice', 'Karty, historie návštěv, osobní odkazy', $counts['customers']],
+        ],
+        'Nabídka a ceník' => array_values(array_filter([
+            [route('admin.services.index'), 'price', 'Ceník služeb', 'Každá kadeřnice si nastavuje, co dělá a za kolik', $counts['services']],
+            $me->is_bookable || $owner ? [route('admin.hours'), 'clock', 'Pracovní doba a volno', 'Týdenní rozvrh včetně soboty a neděle, dovolená', null] : null,
+            [route('admin.products.index'), 'bottle', 'Přípravky', 'Barvy, šampony, péče, styling, ampule', $counts['products']],
+        ])),
+        'Salon' => $owner ? [
+            [route('admin.staff.index'), 'team', 'Kadeřnice', 'Kdo je v rozvrhu, přihlašovací jména a hesla', $counts['staff']],
+            [route('admin.settings'), 'salon', 'Údaje salonu a doklad', 'Název, adresa, telefon, provozovatel a IČO', null],
+            [route('admin.settings').'#pravidla', 'rules', 'Pravidla rezervací', 'Lhůty, krok nabídky časů, schvalování, připomínky', null],
+        ] : [],
+        'Můj účet' => [
+            [route('admin.account'), 'bell', 'Heslo a upozornění', 'Změna hesla, upozornění na tomto zařízení, odhlášení', null],
+        ],
+    ];
+@endphp
 
 @section('content')
-    <p class="label">{{ $salon->name }} · {{ auth()->user()->name }}</p>
-    <h1 class="screen-title">Více</h1>
+    <p class="label">{{ $me->name }} · {{ $me->role->label() }}</p>
+    <h1 class="screen-title">Admin</h1>
 
-    @foreach (array_filter([
-        ['admin.services.index', 'Služby', 'Ceník, délky a pořadí'],
-        ['admin.hours', 'Pracovní doba a volno', 'Týdenní rozvrh, dovolená, výjimky'],
-        auth()->user()->isOwner() ? ['admin.settings', 'Nastavení', 'Pravidla rezervací, údaje salonu, kadeřnice'] : null,
-    ]) as [$route, $title, $text])
-        <a class="row" href="{{ route($route) }}">
-            <span class="row-main"><b>{{ $title }}</b><span>{{ $text }}</span></span>
-            @include('partials.icon', ['name' => 'chevron', 'size' => 20, 'class' => 'text-muted'])
-        </a>
+    @foreach ($groups as $heading => $tiles)
+        @continue($tiles === [])
+        <h2 class="section-title">{{ $heading }}</h2>
+        <div class="tiles">
+            @foreach ($tiles as [$url, $icon, $title, $text, $count])
+                <a class="tile" href="{{ $url }}">
+                    <span class="tile-icon">@include('partials.icon', ['name' => $icon, 'size' => 24])</span>
+                    <span class="tile-main"><b>{{ $title }}</b><span>{{ $text }}</span></span>
+                    @if ($count)<span class="tile-count">{{ $count }}</span>@endif
+                </a>
+            @endforeach
+        </div>
     @endforeach
 
     {{-- Veřejný odkaz salonu ke sdílení (Instagram, web, QR) --}}
-    <h2 class="section-title mt-6">Odkaz pro nové zákaznice</h2>
-    <div class="card" x-data="{
+    <h2 class="section-title mt-6">Stránka pro nové zákaznice</h2>
+    <div class="card max-w-2xl" x-data="{
             url: @js(route('salon.show', $salon)),
             copied: false,
             canShare: typeof navigator.share === 'function',
@@ -29,39 +59,12 @@
                 this.copied = true; setTimeout(() => this.copied = false, 2500);
             },
          }">
-        <p class="label mb-2">Dejte ho na Instagram, web nebo do Google profilu. Nová zákaznice se přes něj objedná poprvé.</p>
+        <p class="label mb-2">Dejte ji na Instagram, web nebo do Google profilu. Nová zákaznice se přes ni objedná poprvé.</p>
         <input class="input mb-2 text-[14px]" type="text" x-ref="url" :value="url" readonly aria-label="Veřejný odkaz salonu">
         <div class="flex gap-2">
-            <button type="button" class="btn btn-primary flex-1" x-show="canShare" x-on:click="share()">Sdílet</button>
+            <a class="btn btn-primary flex-1" href="{{ route('salon.show', $salon) }}" target="_blank" rel="noopener">Otevřít</a>
+            <button type="button" class="btn btn-outline flex-1" x-show="canShare" x-on:click="share()">Sdílet</button>
             <button type="button" class="btn btn-outline flex-1" x-on:click="copy()" x-text="copied ? 'Zkopírováno' : 'Kopírovat'">Kopírovat</button>
         </div>
     </div>
-
-    @include('admin.partials.push')
-
-    {{-- Změna hesla --}}
-    <h2 class="section-title mt-6">Změna hesla</h2>
-    <form method="post" action="{{ route('admin.password') }}" novalidate>
-        @csrf
-        <label class="field">
-            <span>Současné heslo</span>
-            <input class="input" type="password" name="current_password" autocomplete="current-password" required>
-            @error('current_password') <div class="field-error">{{ $message }}</div> @enderror
-        </label>
-        <label class="field">
-            <span>Nové heslo (aspoň 8 znaků)</span>
-            <input class="input" type="password" name="password" autocomplete="new-password" required>
-            @error('password') <div class="field-error">{{ $message }}</div> @enderror
-        </label>
-        <label class="field">
-            <span>Nové heslo znovu</span>
-            <input class="input" type="password" name="password_confirmation" autocomplete="new-password" required>
-        </label>
-        <button class="btn btn-outline btn-block" type="submit">Změnit heslo</button>
-    </form>
-
-    <form method="post" action="{{ route('admin.logout') }}" class="mt-6">
-        @csrf
-        <button class="btn btn-quiet btn-block" type="submit">Odhlásit se</button>
-    </form>
 @endsection

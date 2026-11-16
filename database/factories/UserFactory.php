@@ -21,8 +21,7 @@ class UserFactory extends Factory
         return [
             'salon_id' => Salon::factory(),
             'name' => fake()->firstNameFemale(),
-            'email' => fake()->unique()->safeEmail(),
-            'email_verified_at' => now(),
+            'login' => fake()->unique()->lexify('kadernice-??????'),
             'password' => static::$password ??= Hash::make('password'),
             'role' => UserRole::Staff,
             'color' => '#74624F',

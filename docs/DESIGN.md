@@ -30,6 +30,18 @@ není tam čitelná. Je to výplň (tlačítko, vybraný chip, odznak s počtem)
 Stejné odstíny mají i místa mimo CSS: `theme-color` v `layouts/base.blade.php`, stránka
 `offline.blade.php`, manifest v `PwaController` a ikony v `public/icons`.
 
+## Administrace
+
+- **Horní lišta** (přilepená): velký název salonu (22px, na počítači 28px / 700), pod ním adresa a telefon;
+  na počítači tlačítka hlavní nabídky – vybrané je `--primary`. Na telefonu je nabídka dole.
+- **Rozvrh**: panel s měsíčním kalendářem vlevo a dnem uprostřed; mřížka se záhlavím v `--banner`
+  (jména velkými písmeny, `--banner-text`), osa času po půl hodině.
+  Rezervace: potvrzená = výplň `--primary` s textem `--on-primary` (neonová je tu výplň, ne text),
+  čeká na schválení = `--banner`, proběhlá nebo zaplacená = ztlumená (`--muted` do `--card`),
+  levý okraj v barvě kadeřnice. Pauza (působí barva) čárkovaný obrys, úklid tenký šedý pruh.
+- **Boxíky v Adminu**: karta se zaoblením 16px, ikona ve čtverci `--banner`, počet v kolečku `--primary`.
+- Šířka obsahu: formuláře 672px, přehledy 1024px, rozvrh přes celé okno (do 1720px).
+
 ## Typografie
 - Systémové písmo (`-apple-system, "Segoe UI", Roboto, sans-serif`)
 - Nadpis obrazovky 28px / 600, sekce 16px / 600, text 15px, popisky 13px

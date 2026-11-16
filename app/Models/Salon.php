@@ -11,7 +11,7 @@ class Salon extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'slug', 'phone', 'address', 'timezone', 'settings'];
+    protected $fillable = ['name', 'company', 'ico', 'slug', 'phone', 'address', 'timezone', 'settings'];
 
     protected function casts(): array
     {
@@ -34,10 +34,10 @@ class Salon extends Model
         return $this->hasMany(User::class);
     }
 
-    /** Kadeřnice, ke kterým se lze objednat. */
+    /** Kadeřnice, ke kterým se lze objednat – v pořadí, v jakém do salonu přibyly (sloupce rozvrhu). */
     public function staff(): HasMany
     {
-        return $this->hasMany(User::class)->where('is_bookable', true)->orderBy('name');
+        return $this->hasMany(User::class)->where('is_bookable', true)->orderBy('id');
     }
 
     public function services(): HasMany
@@ -48,6 +48,12 @@ class Salon extends Model
     public function customers(): HasMany
     {
         return $this->hasMany(Customer::class);
+    }
+
+    /** Katalog přípravků salonu. */
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class);
     }
 
     public function bookings(): HasMany

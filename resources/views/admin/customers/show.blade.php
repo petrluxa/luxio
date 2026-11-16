@@ -93,7 +93,8 @@
         <a class="row" href="{{ route('admin.bookings.show', $booking) }}">
             <span class="row-main">
                 <b class="@if ($booking->isPast()) font-normal @endif">{{ Cz::dateTime($booking->starts_at) }} {{ $booking->starts_at->year }}</b>
-                <span>{{ $booking->servicesLabel() }} · {{ $booking->staff->name }} · {{ $booking->priceLabel() }}</span>
+                <span>{{ $booking->servicesLabel() }} · {{ $booking->staff->name }} · {{ $booking->isPaid() ? 'zaplaceno '.Cz::money($booking->paid_amount) : $booking->priceLabel() }}</span>
+                @if ($booking->products->isNotEmpty())<span>Použito: {{ $booking->products->map->label()->join(', ') }}</span>@endif
                 @if ($booking->staff_note)<span>{{ $booking->staff_note }}</span>@endif
             </span>
             @if ($booking->status === BookingStatus::Pending)

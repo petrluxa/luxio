@@ -6,7 +6,7 @@
 @php($query = $staff->is(auth()->user()) ? [] : ['kadernice' => $staff->id])
 
 @section('content')
-    <a class="back-link" href="{{ route('admin.more') }}">Více</a>
+    <a class="back-link" href="{{ route('admin.more') }}">Admin</a>
     <h1 class="screen-title">Pracovní doba</h1>
 
     @include('admin.partials.staff-switch', ['route' => 'admin.hours'])

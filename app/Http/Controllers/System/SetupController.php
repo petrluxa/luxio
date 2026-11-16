@@ -17,8 +17,10 @@ use Throwable;
  * Instalace přes prohlížeč pro hosting bez příkazové řádky: `/instalace/{klíč}`.
  *
  *  - otevření adresy připraví databázi (spustí chybějící migrace),
- *  - dokud žádný salon neexistuje, nabídne formulář na jeho založení,
- *  - jakmile salon existuje, už jen ukazuje stav – nikdo přes ni nezaloží další účet.
+ *  - dokud žádný salon neexistuje, nabídne formulář na jeho založení (účet správce a kadeřnice),
+ *  - jakmile salon existuje, už jen ukazuje stav – nikdo přes ni nezaloží další účet,
+ *  - prázdný salon (bez ceníku a rezervací, např. ze starší verze instalace) jde jednou dovybavit:
+ *    kadeřnice do rozvrhu, vzorový ceník, pracovní doba a katalog přípravků.
  *
  * Adresa existuje jen s klíčem `LUXIO_SETUP_KEY` a běží mimo skupinu `web`
  * (bez session), protože před první migrací ještě nejsou tabulky pro session ani cache.
@@ -40,16 +42,25 @@ class SetupController extends Controller
 
         $state = $this->prepare();
 
-        if ($state['error'] || $state['salon']) {
+        if ($state['error']) {
+            return $this->page($state);
+        }
+
+        if ($state['salon']) {
+            if ($state['incomplete']) {
+                $state['completed'] = $this->installer->complete($state['salon'], Str::limit(trim((string) $request->input('staff')), 600, ''));
+                $state['incomplete'] = false;
+            }
+
             return $this->page($state);
         }
 
         $input = [
             'name' => trim((string) $request->input('name')),
-            'slug' => Str::lower(trim((string) $request->input('slug'))),
             'owner' => trim((string) $request->input('owner')),
-            'email' => Str::lower(trim((string) $request->input('email'))),
+            'login' => Str::lower(trim((string) $request->input('login'))),
             'password' => (string) $request->input('password'),
+            'staff' => trim((string) $request->input('staff')),
         ];
 
         $validator = Validator::make($input, $this->installer->rules(), $this->installer->messages());
@@ -61,6 +72,7 @@ class SetupController extends Controller
 
         $state['salon'] = $this->installer->install($validator->validated());
         $state['created'] = true;
+        $state['login'] = $input['login'];
 
         return $this->page($state);
     }
@@ -75,7 +87,7 @@ class SetupController extends Controller
     /**
      * Připraví databázi a zjistí stav instalace.
      *
-     * @return array{error: ?string, migrations: string, salon: ?Salon, php: string, database: string}
+     * @return array{error: ?string, migrations: string, salon: ?Salon, incomplete: bool, php: string, database: string}
      */
     private function prepare(): array
     {
@@ -84,7 +96,7 @@ class SetupController extends Controller
             @opcache_reset();
         }
 
-        $state = ['error' => null, 'migrations' => '', 'salon' => null, 'php' => PHP_VERSION, 'database' => ''];
+        $state = ['error' => null, 'migrations' => '', 'salon' => null, 'incomplete' => false, 'php' => PHP_VERSION, 'database' => ''];
 
         try {
             $pdo = DB::connection()->getPdo();
@@ -94,6 +106,7 @@ class SetupController extends Controller
             $state['migrations'] = trim(Artisan::output());
 
             $state['salon'] = Salon::query()->orderBy('id')->first();
+            $state['incomplete'] = $state['salon'] !== null && $this->installer->isIncomplete($state['salon']);
         } catch (Throwable $e) {
             report($e);
 
@@ -107,7 +120,7 @@ class SetupController extends Controller
     private function page(array $state, int $status = 200): Response
     {
         return response()
-            ->view('system.setup', $state + ['problems' => [], 'old' => [], 'created' => false, 'action' => url()->current()], $status)
+            ->view('system.setup', $state + ['problems' => [], 'old' => [], 'created' => false, 'completed' => null, 'login' => null, 'action' => url()->current()], $status)
             ->header('Cache-Control', 'no-store, private')
             ->header('X-Robots-Tag', 'noindex, nofollow')
             ->header('Referrer-Policy', 'no-referrer');

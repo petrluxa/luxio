@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Notification;
 beforeEach(function () {
     $this->travelTo(TEST_NOW);
     $this->salon = Salon::factory()->create();
-    $this->petra = staffMember($this->salon, attributes: ['name' => 'Petra', 'email' => 'petra@example.com', 'role' => UserRole::Owner]);
+    $this->petra = staffMember($this->salon, attributes: ['name' => 'Petra', 'login' => 'petra', 'role' => UserRole::Owner]);
     $this->cut = service($this->salon);
     $this->jana = customer($this->salon, ['name' => 'Jana Nováková', 'phone' => '+420603123456']);
     $this->manager = app(BookingManager::class);
@@ -33,8 +33,9 @@ describe('přihlášení', function () {
         $this->get('/admin/zakaznice')->assertRedirect('/admin/login');
     });
 
-    test('e-mail a heslo přihlásí, „zapamatovat“ nastaví trvalou cookie', function () {
-        $this->post('/admin/login', ['email' => 'petra@example.com', 'password' => 'password', 'remember' => '1'])
+    test('jméno a heslo přihlásí, „zapamatovat“ nastaví trvalou cookie', function () {
+        // Velká písmena ani mezery kolem jména nevadí.
+        $this->post('/admin/login', ['login' => ' Petra ', 'password' => 'password', 'remember' => '1'])
             ->assertRedirect('/admin');
 
         $this->assertAuthenticatedAs($this->petra);
@@ -43,11 +44,29 @@ describe('přihlášení', function () {
 
     test('špatné heslo nepustí a po pěti pokusech se přihlášení na chvíli zamkne', function () {
         foreach (range(1, 5) as $i) {
-            $this->post('/admin/login', ['email' => 'petra@example.com', 'password' => 'spatne'])->assertSessionHasErrors('email');
+            $this->post('/admin/login', ['login' => 'petra', 'password' => 'spatne'])->assertSessionHasErrors('login');
         }
 
-        $this->post('/admin/login', ['email' => 'petra@example.com', 'password' => 'password'])->assertSessionHasErrors('email');
+        $this->post('/admin/login', ['login' => 'petra', 'password' => 'password'])->assertSessionHasErrors('login');
         $this->assertGuest();
+    });
+
+    test('kadeřnice bez přihlašovacích údajů se nepřihlásí ani s prázdným heslem', function () {
+        $sabina = staffMember($this->salon, attributes: ['name' => 'Sabina', 'login' => null, 'password' => null]);
+
+        expect($sabina->canLogIn())->toBeFalse();
+
+        $this->post('/admin/login', ['login' => '', 'password' => ''])->assertSessionHasErrors('login');
+        $this->post('/admin/login', ['login' => 'sabina', 'password' => 'cokoliv'])->assertSessionHasErrors('login');
+        $this->assertGuest();
+    });
+
+    test('přihlašovací stránka chce jméno, ne e-mail', function () {
+        $this->get('/admin/login?jmeno=Petra')->assertOk()
+            ->assertSee('Přihlašovací jméno')
+            ->assertSee('name="login"', false)
+            ->assertSee('value="petra"', false)
+            ->assertDontSee('type="email"', false);
     });
 
     test('odhlášení', function () {
@@ -83,9 +102,18 @@ test('všechny obrazovky administrace se vykreslí', function (string $path) {
     '/admin/sluzby/{service}',
     '/admin/pracovni-doba',
     '/admin/vice',
+    '/admin/ucet',
+    '/admin/sluzby?kadernice={member}',
+    '/admin/kalendar?mesic=2026-12&datum='.TEST_DAY,
     '/admin/nastaveni',
+    '/admin/kadernice',
     '/admin/kadernice/nova',
     '/admin/kadernice/{member}',
+    '/admin/kalendar?kadernice={member}&datum='.TEST_DAY,
+    '/admin/rezervace/{booking}/vyuctovani',
+    '/admin/pripravky',
+    '/admin/pripravky?q=majirel&druh=barvy',
+    '/admin/pripravky/novy',
 ]);
 
 test('dnes ukazuje další zákaznici a rychlé akce', function () {
@@ -125,9 +153,11 @@ test('nastavení a správa kadeřnic jsou jen pro majitelku', function () {
 
     $this->get('/admin/nastaveni')->assertForbidden();
     $this->post('/admin/nastaveni', [])->assertForbidden();
+    $this->get('/admin/kadernice')->assertForbidden();
     $this->get('/admin/kadernice/nova')->assertForbidden();
-    $this->get('/admin/sluzby/nova')->assertForbidden();
-    $this->get('/admin/vice')->assertOk()->assertDontSee('Pravidla rezervací');
+    $this->post('/admin/pripravky/katalog')->assertForbidden();
+    $this->get('/admin/vice')->assertOk()->assertSee('Ceník služeb')->assertDontSee('Pravidla rezervací')->assertDontSee('Údaje salonu');
+    $this->get('/admin/ucet')->assertOk()->assertSee('Změna hesla');
 });
 
 describe('ke schválení', function () {
@@ -336,47 +366,123 @@ describe('zákaznice', function () {
     });
 });
 
-describe('služby', function () {
-    test('nová služba se přidá na konec ceníku a dostanou ji všechny kadeřnice', function () {
+describe('ceník', function () {
+    $row = fn (array $overrides = []) => $overrides + ['offers' => '1', 'price' => 550, 'work_1' => 45, 'pause' => 0, 'work_2' => 0];
+
+    test('správce přidá službu a vybere, které kadeřnice ji dělají', function () {
         $lucie = staffMember($this->salon);
+        $eva = staffMember($this->salon);
 
         $this->actingAs($this->petra)->post('/admin/sluzby', [
             'name' => 'Barvení a střih', 'price_from' => 1400, 'price_to' => 2200,
             'work_1' => 30, 'pause' => 40, 'work_2' => 60, 'buffer_after' => 10, 'is_active' => '1',
+            'staff' => [$this->petra->id, $lucie->id],
         ])->assertRedirect('/admin/sluzby');
 
         $service = Service::where('name', 'Barvení a střih')->sole();
 
         expect($service->totalMinutes())->toBe(130)
             ->and($service->sort)->toBeGreaterThan($this->cut->sort)
-            ->and($service->staff->modelKeys())->toEqualCanonicalizing([$this->petra->id, $lucie->id]);
+            ->and($service->staff->modelKeys())->toEqualCanonicalizing([$this->petra->id, $lucie->id])
+            ->and($eva->services()->whereKey($service->id)->exists())->toBeFalse();
     });
 
-    test('úprava ceníku a vlastní cena kadeřnice', function () {
-        $this->actingAs($this->petra)->post("/admin/sluzby/{$this->cut->id}", [
-            'name' => 'Dámský střih', 'price_from' => 600, 'work_1' => 50, 'is_active' => '1',
-            'offers' => '1', 'own_price' => 750, 'own_work_1' => 60,
+    test('kadeřnice si přidá vlastní službu – dostane ji jen ona a smí ji upravit', function () {
+        $lucie = staffMember($this->salon, attributes: ['role' => UserRole::Staff]);
+
+        // Pokus přidělit službu i kolegyni se u kadeřnice ignoruje.
+        $this->actingAs($lucie)->post('/admin/sluzby', [
+            'name' => 'Modelace nehtů', 'price_from' => 900, 'work_1' => 105, 'is_active' => '1', 'staff' => [$this->petra->id],
         ])->assertRedirect('/admin/sluzby');
 
-        $pivot = $this->petra->services()->whereKey($this->cut->id)->first()->pivot;
+        $nails = Service::where('name', 'Modelace nehtů')->sole();
 
-        expect($this->cut->fresh())->price_from->toBe(600)->work_1->toBe(50)
-            ->and($pivot->price_from)->toBe(750)
+        expect($nails->staff->modelKeys())->toBe([$lucie->id]);
+
+        $this->get("/admin/sluzby/{$nails->id}")->assertOk();
+        $this->post("/admin/sluzby/{$nails->id}", ['name' => 'Modelace nehtů – nová', 'price_from' => 950, 'work_1' => 110, 'is_active' => '1'])
+            ->assertRedirect('/admin/sluzby');
+
+        expect($nails->fresh())->name->toBe('Modelace nehtů – nová')->price_from->toBe(950);
+    });
+
+    test('společnou službu kadeřnice nepřepíše, jen si u ní nastaví svoji cenu', function () use ($row) {
+        $lucie = staffMember($this->salon, attributes: ['role' => UserRole::Staff]);
+        $lucie->services()->attach($this->cut->id);
+
+        $this->actingAs($lucie);
+
+        $this->get("/admin/sluzby/{$this->cut->id}")->assertRedirect('/admin/sluzby');
+        $this->post("/admin/sluzby/{$this->cut->id}", ['name' => 'Přepsáno', 'price_from' => 1, 'work_1' => 5])->assertForbidden();
+        $this->post("/admin/sluzby/{$this->cut->id}/poradi", ['direction' => 'up'])->assertForbidden();
+
+        $this->post('/admin/sluzby/cenik', ['rows' => [$this->cut->id => $row(['price' => 700, 'work_1' => 60])]])->assertSessionHas('status');
+
+        $pivot = $lucie->services()->whereKey($this->cut->id)->first()->pivot;
+
+        expect($this->cut->fresh())->name->toBe('Dámský střih')->price_from->toBe(550)
+            ->and($pivot->price_from)->toBe(700)
             ->and($pivot->work_1)->toBe(60)
-            ->and($pivot->pause)->toBeNull();
+            // Co je stejné jako výchozí hodnota, se neukládá.
+            ->and($pivot->pause)->toBeNull()->and($pivot->work_2)->toBeNull()
+            // Petřin ceník se nezměnil.
+            ->and($this->petra->services()->whereKey($this->cut->id)->first()->pivot->price_from)->toBeNull();
     });
 
-    test('„tuto službu nedělám“ ji u kadeřnice přestane nabízet', function () {
-        $this->actingAs($this->petra)->post("/admin/sluzby/{$this->cut->id}", [
-            'name' => 'Dámský střih', 'price_from' => 550, 'work_1' => 45, 'is_active' => '1',
-        ]);
+    test('ceník se ukládá celý najednou: co není zaškrtnuté, kadeřnice nedělá', function () use ($row) {
+        $blow = service($this->salon, ['name' => 'Foukaná', 'price_from' => 350, 'work_1' => 30]);
+        $color = coloring($this->salon);
 
-        expect($this->petra->services()->count())->toBe(0);
+        $this->actingAs($this->petra)->post('/admin/sluzby/cenik', ['rows' => [
+            $this->cut->id => $row(),
+            $blow->id => ['price' => 400, 'work_1' => 30, 'pause' => 0, 'work_2' => 0],   // nezaškrtnuto
+            $color->id => $row(['price' => 1400, 'work_1' => 30, 'pause' => 45, 'work_2' => 60]),
+        ]])->assertSessionHas('status');
+
+        $mine = $this->petra->services()->get()->keyBy('id');
+
+        expect($mine->keys()->all())->toEqualCanonicalizing([$this->cut->id, $color->id])
+            ->and($mine[$this->cut->id]->pivot->price_from)->toBeNull()
+            ->and($mine[$color->id]->pivot->pause)->toBe(45)
+            ->and($mine[$color->id]->pivot->price_from)->toBeNull();
+
+        $this->get('/admin/sluzby')->assertOk()->assertSee('Foukaná')->assertSee('Uložit ceník');
     });
 
-    test('cena „do“ musí být vyšší než „od“ a práce aspoň 5 minut', function () {
+    test('správce nastaví ceník kterékoliv kadeřnici, kadeřnice jen sobě', function () use ($row) {
+        $lucie = staffMember($this->salon, attributes: ['name' => 'Lucie', 'role' => UserRole::Staff]);
+
+        $this->actingAs($this->petra);
+        $this->get("/admin/sluzby?kadernice={$lucie->id}")->assertOk()->assertSee('Ceník – Lucie');
+        $this->post("/admin/sluzby/cenik?kadernice={$lucie->id}", ['rows' => [$this->cut->id => $row(['price' => 600])]]);
+
+        expect($lucie->services()->first()->pivot->price_from)->toBe(600);
+
+        // Lucie s cizím číslem v adrese uloží ceník sobě, ne Petře.
+        $this->actingAs($lucie)->post("/admin/sluzby/cenik?kadernice={$this->petra->id}", ['rows' => []]);
+
+        expect($lucie->services()->count())->toBe(0)->and($this->petra->services()->count())->toBe(1);
+    });
+
+    test('zákaznice vidí u služby cenu a délku vybrané kadeřnice', function () use ($row) {
+        $lucie = staffMember($this->salon, attributes: ['name' => 'Lucie']);
+        $lucie->services()->attach($this->cut->id, ['price_from' => 700, 'work_1' => 60]);
+
+        $service = app(App\Services\Booking\BookingWizard::class)->options($this->salon)['services'][0];
+        $nbsp = "\u{00A0}";
+
+        expect($service['metaByStaff'][$this->petra->id])->toBe("45{$nbsp}min · 550{$nbsp}Kč")
+            ->and($service['metaByStaff'][$lucie->id])->toBe("1{$nbsp}h · 700{$nbsp}Kč")
+            // „Kdokoliv“: rozpětí délky a cena od nejlevnější.
+            ->and($service['meta'])->toBe("45{$nbsp}min až 1{$nbsp}h · od 550{$nbsp}Kč");
+    });
+
+    test('cena „do“ musí být vyšší než „od“ a práce aspoň 5 minut', function () use ($row) {
         $this->actingAs($this->petra)->post('/admin/sluzby', ['name' => 'X', 'price_from' => 500, 'price_to' => 400, 'work_1' => 0])
             ->assertSessionHasErrors(['price_to', 'work_1']);
+
+        $this->post('/admin/sluzby/cenik', ['rows' => [$this->cut->id => $row(['price' => -1, 'work_1' => 2])]])
+            ->assertSessionHasErrors(["rows.{$this->cut->id}.price", "rows.{$this->cut->id}.work_1"]);
     });
 
     test('pořadí v ceníku', function () {
@@ -385,18 +491,6 @@ describe('služby', function () {
         $this->actingAs($this->petra)->post("/admin/sluzby/{$second->id}/poradi", ['direction' => 'up']);
 
         expect($this->salon->services()->pluck('name')->all())->toBe(['Foukaná', 'Dámský střih']);
-    });
-
-    test('kadeřnice bez role majitelky ceník nemění, jen své nastavení', function () {
-        $lucie = staffMember($this->salon, attributes: ['role' => UserRole::Staff]);
-        $lucie->services()->attach($this->cut->id);
-
-        $this->actingAs($lucie)->post("/admin/sluzby/{$this->cut->id}", [
-            'name' => 'Přepsáno', 'price_from' => 1, 'work_1' => 5, 'offers' => '1', 'own_price' => 500,
-        ])->assertRedirect();
-
-        expect($this->cut->fresh()->name)->toBe('Dámský střih')
-            ->and($lucie->services()->first()->pivot->price_from)->toBe(500);
     });
 });
 
@@ -494,27 +588,71 @@ describe('nastavení', function () {
         $this->post('/admin/nastaveni', settingsPayload(['slug' => 'Kadeřnictví Petra']))->assertSessionHasErrors('slug');
     });
 
-    test('přidání kadeřnice: dostane služby salonu a přihlásí se', function () {
+    test('přidání kadeřnice s vlastním přihlášením: dostane služby salonu a přihlásí se', function () {
         $this->actingAs($this->petra)->post('/admin/kadernice', [
-            'name' => 'Lucie', 'email' => 'Lucie@example.com', 'password' => 'tajneheslo1', 'role' => 'staff', 'color' => '#8E7A73', 'is_bookable' => '1',
-        ])->assertRedirect('/admin/nastaveni');
+            'name' => 'Lucie', 'login' => 'Lucie', 'password' => 'tajneheslo1', 'role' => 'staff', 'color' => '#8E7A73', 'is_bookable' => '1',
+        ])->assertRedirect();
 
-        $lucie = User::where('email', 'lucie@example.com')->sole();
+        $lucie = User::where('login', 'lucie')->sole();
 
         expect($lucie->salon_id)->toBe($this->salon->id)
             ->and($lucie->role)->toBe(UserRole::Staff)
             ->and($lucie->services->modelKeys())->toBe([$this->cut->id]);
 
         auth()->logout();
-        $this->post('/admin/login', ['email' => 'lucie@example.com', 'password' => 'tajneheslo1'])->assertRedirect('/admin');
+        $this->post('/admin/login', ['login' => 'lucie', 'password' => 'tajneheslo1'])->assertRedirect('/admin');
     });
 
-    test('salon nesmí zůstat bez majitelky', function () {
-        $this->actingAs($this->petra)->post("/admin/kadernice/{$this->petra->id}", [
-            'name' => 'Petra', 'email' => 'petra@example.com', 'role' => 'staff', 'color' => '#B97D80', 'is_bookable' => '1',
+    test('kadeřnice jde přidat i bez přihlášení – je jen v rozvrhu', function () {
+        $this->actingAs($this->petra)->post('/admin/kadernice', [
+            'name' => 'Sabina', 'role' => 'staff', 'color' => '#8E7A73', 'is_bookable' => '1',
+        ])->assertRedirect();
+
+        $sabina = User::where('name', 'Sabina')->sole();
+
+        expect($sabina->login)->toBeNull()->and($sabina->password)->toBeNull()->and($sabina->canLogIn())->toBeFalse();
+
+        $this->get('/admin/kadernice')->assertOk()->assertSee('Sabina')->assertSee('bez vlastního přihlášení');
+        $this->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()->assertSee('Sabina');
+    });
+
+    test('přihlašovací jméno chce heslo, musí být jedinečné a bez háčků', function () {
+        $this->actingAs($this->petra);
+        $form = fn (array $overrides) => $overrides + ['name' => 'Šárka', 'role' => 'staff', 'color' => '#8E7A73', 'is_bookable' => '1'];
+
+        $this->post('/admin/kadernice', $form(['login' => 'sarka']))->assertSessionHasErrors('password');
+        $this->post('/admin/kadernice', $form(['login' => 'šárka', 'password' => 'tajneheslo1']))->assertSessionHasErrors('login');
+        $this->post('/admin/kadernice', $form(['login' => 'petra', 'password' => 'tajneheslo1']))->assertSessionHasErrors('login');
+        $this->post('/admin/kadernice', $form(['login' => 'sarka', 'password' => 'kratke']))->assertSessionHasErrors('password');
+
+        expect(User::where('name', 'Šárka')->exists())->toBeFalse();
+    });
+
+    test('smazáním přihlašovacího jména kadeřnice o přístup přijde', function () {
+        $lucie = staffMember($this->salon, attributes: ['name' => 'Lucie', 'login' => 'lucie']);
+
+        $this->actingAs($this->petra)->post("/admin/kadernice/{$lucie->id}", [
+            'name' => 'Lucie', 'login' => '', 'role' => 'staff', 'color' => '#8E7A73', 'is_bookable' => '1',
+        ])->assertRedirect('/admin/kadernice');
+
+        expect($lucie->fresh()->canLogIn())->toBeFalse();
+
+        auth()->logout();
+        $this->post('/admin/login', ['login' => 'lucie', 'password' => 'password'])->assertSessionHasErrors('login');
+    });
+
+    test('salon nesmí zůstat bez správce s přihlášením', function () {
+        $this->actingAs($this->petra);
+
+        $this->post("/admin/kadernice/{$this->petra->id}", [
+            'name' => 'Petra', 'login' => 'petra', 'role' => 'staff', 'color' => '#B97D80', 'is_bookable' => '1',
         ])->assertSessionHas('error');
 
-        expect($this->petra->fresh()->role)->toBe(UserRole::Owner);
+        $this->post("/admin/kadernice/{$this->petra->id}", [
+            'name' => 'Petra', 'login' => '', 'role' => 'owner', 'color' => '#B97D80', 'is_bookable' => '1',
+        ])->assertSessionHas('error');
+
+        expect($this->petra->fresh())->role->toBe(UserRole::Owner)->login->toBe('petra');
     });
 
     test('změna vlastního hesla vyžaduje to současné', function () {

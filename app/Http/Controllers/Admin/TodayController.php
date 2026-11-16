@@ -6,16 +6,22 @@ use App\Enums\BookingStatus;
 use App\Models\Booking;
 use App\Services\Availability\HolidayCalendar;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * Dnes: další zákaznice nahoře, pod ní časová osa dne s rychlými akcemi.
+ * Dnes: osobní přehled kadeřnice – další zákaznice nahoře, pod ní časová osa dne s rychlými akcemi.
  */
 class TodayController extends AdminController
 {
-    public function __invoke(Request $request, HolidayCalendar $holidays): View
+    public function __invoke(Request $request, HolidayCalendar $holidays): View|RedirectResponse
     {
+        // Správce nebo recepce bez vlastních zákaznic začíná rozvrhem všech kadeřnic.
+        if (! $this->user()->is_bookable) {
+            return redirect()->route('admin.calendar');
+        }
+
         $staff = $this->currentStaff($request);
         $today = CarbonImmutable::today();
 

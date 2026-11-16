@@ -58,10 +58,11 @@ class AppServiceProvider extends ServiceProvider
         Event::subscribe(SendBookingNotifications::class);
         Event::subscribe(LogNotifications::class);
 
-        // Počet rezervací ke schválení ve spodní nabídce administrace.
+        // Horní lišta administrace: salon přihlášeného a počet rezervací ke schválení.
         View::composer('layouts.admin', function ($view) {
             $user = auth()->user();
 
+            $view->with('salon', $user?->salon);
             $view->with('pendingCount', $user
                 ? Booking::where('salon_id', $user->salon_id)
                     ->where('status', BookingStatus::Pending)

@@ -14,8 +14,15 @@ uloží na plochu telefonu, a dostávají **push notifikace** (připomínka, zru
 |---|---|---|
 | Zákaznice | osobní odkaz `/k/{token}` (bez hesla) | rezervuje, vidí a ruší své termíny, dostává notifikace |
 | Nová zákaznice | veřejný odkaz salonu `/s/{salon}` | první rezervace, při ní se jí založí účet + token |
-| Kadeřnice (staff) | e-mail + heslo, „zapamatovat“ | kalendář, rezervace, zákaznice, své služby a pracovní dobu |
-| Majitelka (owner) | e-mail + heslo | vše jako staff + nastavení salonu, správa kadeřnic |
+| Kadeřnice (staff) | přihlašovací jméno + heslo, „zapamatovat“ | rozvrh, rezervace, zákaznice, vyúčtování, své služby a pracovní dobu (včetně so a ne) |
+| Správce salonu (owner) | přihlašovací jméno + heslo | vše jako kadeřnice + ceník, nastavení salonu, správa kadeřnic a jejich přihlášení |
+
+Rozhodnutí z 16. 11. 2026:
+- Přihlašuje se **jménem** (např. `sabina`), ne e-mailem – aplikace žádné e-maily neposílá.
+- Správce nemusí být kadeřnice (recepce, manažer): pak nemá sloupec v rozvrhu ani přehled „Dnes“
+  a po přihlášení vidí rozvrh dne všech kadeřnic.
+- Kadeřnice může být v rozvrhu i bez vlastního přihlášení – rezervace jí pak zapisuje správce.
+  Přihlašovací jméno a heslo jí nastaví správce (Více → Kadeřnice).
 
 ## 3. Přístup zákaznice (token)
 
@@ -96,6 +103,24 @@ Stavy: `pending` (čeká na schválení) · `confirmed` · `cancelled_by_custome
 - Po lhůtě zrušení: tlačítko nahradí text „Pro zrušení zavolejte“ + telefon salonu.
 - Kadeřnice: vytvořit ručně (zákaznice volá), přesunout, zrušit s důvodem, schválit/zamítnout pending,
   označit „nepřišla“; poznámka ke každé návštěvě.
+- **Dvě zákaznice najednou:** kadeřnice i správce smějí zapsat zákaznici i na obsazený čas nebo mimo
+  pracovní dobu (pole „Jiný čas“ v průvodci, vždy s konkrétní kadeřnicí). Zákaznicím se takový čas
+  nenabízí a samy si ho vynutit nemohou. Rozvrh souběžné rezervace kreslí vedle sebe.
+- **Předání jiné kadeřnici:** rezervace přejde ke kolegyni ve stejný čas (i když má plno, s upozorněním).
+  Zákaznici se neposílá oznámení – dá jí vědět kadeřnice.
+- **Přetažení v rozvrhu (drag and drop):** rezervaci jde myší přetáhnout na jiný čas, do sloupce jiné
+  kadeřnice, v týdnu na jiný den. Prstem až po krátkém podržení (jinak by nešlo stránkou posouvat).
+  Čas se zaokrouhluje na krok nabídky časů, u okraje okna se stránka sama posouvá. Po puštění se přesun
+  potvrzuje v okně, které upozorní na obsazený čas nebo čas mimo pracovní dobu; projde i tak. Platí jen
+  pro živé rezervace (čekající a potvrzené), pro správce i kadeřnice.
+- **Vyúčtování:** u návštěvy se zapíše, co kadeřnice použila (přípravek z katalogu nebo vlastní název
+  + odstín a množství), částka a způsob platby. Zaplacením vzniká **doklad** s číslem `ROK-pořadí`
+  (řada pro každý salon zvlášť; oprava částky číslo nemění, zrušené zaplacení ho nevrací do řady).
+  Přípravky jdou uložit i bez platby. Zaplacená návštěva, která už začala, je `completed`.
+- **Doklad o zaplacení:** veřejná stránka `/doklad/{rezervace}/{kód}`; kód se počítá z klíče aplikace
+  (HMAC), neukládá se a bez něj stránka neexistuje. Kadeřnice odkaz pošle přes WhatsApp nebo jinak
+  sdílí; zákaznice ho má i u termínu ve své aplikaci. Na dokladu je salon, provozovatel, IČO, datum,
+  služby, částka a způsob platby – použité přípravky ne.
 - Uložené údaje: snapshot služeb (název, délky, cena) v `booking_items`, aby změna ceníku neměnila historii.
 
 ## 6. Notifikace
@@ -140,21 +165,49 @@ v aplikaci – a kadeřnice se po zrušení nebo přesunu dozví, že má dát z
 4. **Profil** – jméno, telefon, notifikace zapnuto/vypnuto, „Přidat na plochu“
 5. **Onboarding** – přidat na plochu → povolit notifikace
 
-### Kadeřnice (admin)
-1. **Dnes** – časová osa dne, další zákaznice nahoře, rychlé akce (zavolat, poznámka, nepřišla)
-2. **Kalendář** – den / týden, ťuknutí na volné místo = nová rezervace, přesun termínu
+### Správce a kadeřnice (admin)
+
+Rozložení jako u rozvrhu sportovišť (rozhodnutí z 16. 11. 2026): nahoře lišta s **velkým názvem
+salonu** a na počítači hlavní nabídkou (Rozvrh, Schválit, Zákaznice, **Admin**, jméno přihlášeného);
+na telefonu je nabídka dole. Posouvá se vždy celá stránka, žádné vnitřní posuvníky.
+
+1. **Dnes** – osobní přehled kadeřnice: časová osa dne, další zákaznice nahoře, rychlé akce
+   (zavolat, poznámka, nepřišla). Správce bez vlastních zákaznic ho nemá.
+2. **Rozvrh** – vlevo **měsíční kalendář** (skok na den, tečka = den s rezervacemi), uprostřed den
+   se šipkami a tlačítky Dnes / Zítra, přepínač Den / Týden a výběr kadeřnice. Pod tím mřížka:
+   **sloupce = kadeřnice** (jako kurty; v pořadí, v jakém do salonu přibyly), řádky po půl hodině,
+   v záhlaví jméno a začátek a konec pracovní doby. Rezervace ukazuje čas a délku, jméno, telefon
+   a službu; barva podle stavu (potvrzená neonová, čeká hnědá, proběhlá nebo zaplacená ztlumená).
+   Kliknutí na místo = nová rezervace (i mimo pracovní dobu), tlačítko + u jména = další zákaznice,
+   přetažení = přesun. Záhlaví sloupců se na počítači drží pod horní lištou; na telefonu se víc sloupců
+   posouvá do strany. Sloupec může být i jiná služba než kadeřnice (např. modelace nehtů).
 3. **Ke schválení** – seznam pending s tlačítky Schválit / Zamítnout
-4. **Zákaznice** – hledání, karta: kontakty, historie návštěv, **receptura barvy**, poznámky,
-   blokace, „Poslat odkaz“ (vygenerovat/sdílet token)
-5. **Služby** – ceník, délky fází, pořadí
-6. **Pracovní doba a volno**
-7. **Nastavení** – pravidla z 4.3, údaje salonu, kadeřnice (owner)
+4. **Zákaznice** – hledání, karta: kontakty, historie návštěv včetně použitých přípravků,
+   **receptura barvy**, poznámky, blokace, „Poslat odkaz“ (vygenerovat/sdílet token)
+5. **Rezervace** – detail, přesun, předání jiné kadeřnici, **vyúčtování** a odeslání dokladu
+6. **Admin** – rozcestník s boxíky, ať je na jednom místě vidět, co všechno se dá nastavit: Provoz
+   (Rozvrh, Ke schválení, Zákaznice), Nabídka a ceník (Ceník služeb, Pracovní doba a volno, Přípravky),
+   Salon (Kadeřnice, Údaje salonu a doklad, Pravidla rezervací – jen owner), Můj účet. Nová oblast =
+   nový boxík.
+7. **Přípravky** – katalog podle značky a druhu (barvy, šampony, péče, styling, ampule, ostatní),
+   hledání, vlastní položky, skrytí nepoužívaných; výchozí katalog Kérastase a L'Oréal Professionnel
+   (`database/data/pripravky.json`) se nahraje při založení salonu a jde doplnit znovu (owner)
+8. **Ceník služeb** – **každá kadeřnice má svůj ceník**: v jedné tabulce zaškrtne, které služby dělá,
+   a nastaví vlastní cenu a délky (práce – pauza – dokončení); ukládá se celý najednou. Zákaznice vidí
+   u vybrané kadeřnice její ceny, u volby „Kdokoliv“ cenu „od“ nejnižší. Kadeřnice si může přidat
+   vlastní službu (dostane ji jen ona) a tu si i upravit; společné služby a pořadí upravuje owner,
+   který také vidí a upraví ceník kterékoliv kadeřnice.
+9. **Pracovní doba a volno** – každá kadeřnice sobě, správce komukoliv
+10. **Kadeřnice** – seznam, přihlašovací jméno a heslo, oprávnění, barva v rozvrhu (owner)
+11. **Nastavení** – pravidla z 4.3, údaje salonu a dokladu (provozovatel, IČO) (owner)
+12. **Můj účet** – změna hesla, upozornění na tomto zařízení, odhlášení
 
 ## 9. Datový model
 
 ```
-salons            id, name, slug, phone, address, timezone, settings(json), timestamps
-users             id, salon_id, name, email, password, role(owner|staff), color, is_bookable, timestamps
+salons            id, name, company null, ico null, slug, phone, address, timezone, settings(json), timestamps
+users             id, salon_id, name, login null (unique), password null, role(owner|staff), color,
+                  is_bookable, timestamps        -- bez login/password se nepřihlásí
 services          id, salon_id, name, description, price_from, price_to null, work_1, pause, work_2,
                   buffer_after, is_active, sort, timestamps
 staff_service     user_id, service_id, price_from null, work_1 null, pause null, work_2 null
@@ -165,8 +218,13 @@ customers         id, salon_id, name, phone, preferred_staff_id null,
 customer_access_tokens  id, customer_id, token_hash(unique), scope_staff_id null, last_used_at null,
                   revoked_at null, timestamps
 bookings          id, salon_id, staff_id, customer_id, starts_at, ends_at, status, total_price,
+                  paid_amount null, payment_method(cash|card|transfer) null, paid_at null,
+                  receipt_number null (unique v salonu),
                   customer_note null, staff_note null, source(online|manual|salon_link), reminder_sent_at null,
                   cancelled_at null, cancel_reason null, timestamps
+products          id, salon_id, brand, line null, name, kind null, category(barvy|sampony|pece|styling|
+                  ampule|ostatni), size null, is_active, timestamps
+booking_products  id, booking_id, product_id null, name (opis), note null (odstín, množství), sequence
 booking_items     id, booking_id, service_id, name, price, work_1, pause, work_2, buffer_after, sequence
 booking_segments  id, booking_id, staff_id, starts_at, ends_at, type(work|pause|buffer)
                   index (staff_id, starts_at)
@@ -189,5 +247,9 @@ notification_log  id, notifiable, type, channel(push), booking_id null, sent_at,
 
 - Název aplikace a doména
 - Hosting – zkušebně v podsložce jiného webu na sdíleném hostingu (bez příkazové řádky); ostrý zatím neurčen
-- Kolik kadeřnic bude od začátku – rozhodnuto: dvě
+- Kolik kadeřnic bude od začátku – rozhodnuto: Sabina, Šárka, třetí kadeřnice a modelace nehtů
+  (vlastní sloupec i služby) + správce salonu; zatím jeden salon
+- Pořadí sloupců v rozvrhu je zatím podle založení – až bude potřeba, přidat ruční řazení
+- Katalog L'Oréal Professionnel je první návrh sestavený bez oficiálního ceníku – kadeřnice ho projdou,
+  nepoužívané skryjí a chybějící doplní; odstíny barev se zapisují až u návštěvy
 - Bude se později prodávat dalším salonům? (pak od začátku vše přes `salon_id` – model s tím počítá)

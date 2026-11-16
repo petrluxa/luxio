@@ -152,6 +152,14 @@ final class Cz
         return $phone;
     }
 
+    /** 603 123 456 – česká čísla bez předvolby (do rozvrhu, kde je málo místa). */
+    public static function phoneShort(?string $phone): string
+    {
+        $formatted = self::phone($phone);
+
+        return str_starts_with($formatted, '+420 ') ? substr($formatted, 5) : $formatted;
+    }
+
     /**
      * Sjednotí zápis telefonu na +420123456789. Vrací null, když číslo nedává smysl.
      */

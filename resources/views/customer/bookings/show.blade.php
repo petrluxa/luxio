@@ -27,7 +27,11 @@
         <dl class="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t border-line pt-3 text-[15px]">
             <dt class="text-muted">Kadeřnice</dt><dd>{{ $booking->staff->name }}</dd>
             <dt class="text-muted">Čas</dt><dd>{{ Cz::time($booking->starts_at) }}–{{ Cz::time($booking->ends_at) }} ({{ Cz::duration($booking->durationMinutes()) }})</dd>
-            <dt class="text-muted">Cena</dt><dd>{{ $booking->priceLabel() }}</dd>
+            @if ($booking->isPaid())
+                <dt class="text-muted">Zaplaceno</dt><dd>{{ Cz::money($booking->paid_amount) }} {{ $booking->payment_method->label() }}</dd>
+            @else
+                <dt class="text-muted">Cena</dt><dd>{{ $booking->priceLabel() }}</dd>
+            @endif
             @if ($booking->salon->address)
                 <dt class="text-muted">Kde</dt><dd>{{ $booking->salon->name }}, {{ $booking->salon->address }}</dd>
             @endif
@@ -36,6 +40,10 @@
             @endif
         </dl>
     </div>
+
+    @if ($booking->receiptUrl())
+        <a class="btn btn-outline btn-block mt-4" href="{{ $booking->receiptUrl() }}">Doklad o zaplacení</a>
+    @endif
 
     @if ($booking->status->isActive() && ! $booking->isPast())
         @if ($booking->canBeCancelledByCustomer())

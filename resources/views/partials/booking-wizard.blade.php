@@ -12,6 +12,9 @@
     </template>
     <input type="hidden" name="date" :value="date ?? ''">
     <input type="hidden" name="time" :value="time ?? ''">
+    <template x-if="anyTime">
+        <input type="hidden" name="force" :value="forced ? 1 : ''">
+    </template>
     @if ($replaces ?? null)
         <input type="hidden" name="replaces" value="{{ $replaces->id }}">
     @endif
@@ -41,7 +44,7 @@
                 <button type="button" class="option-card" role="checkbox" :aria-checked="serviceIds.includes(service.id)"
                         x-on:click="toggleService(service.id)">
                     <div class="dot"></div>
-                    <div><b x-text="service.name"></b><span x-text="service.meta"></span></div>
+                    <div><b x-text="service.name"></b><span x-text="metaFor(service)"></span></div>
                 </button>
             </template>
         </div>
@@ -59,7 +62,7 @@
         <div class="chips" role="group" aria-labelledby="wizard-days">
             <button type="button" class="chip" x-show="prev" x-on:click="shift(prev)" aria-label="Dřívější dny">‹</button>
             <template x-for="day in days" :key="day.date">
-                <button type="button" class="chip" :class="{ 'is-off': day.times.length === 0 }" :disabled="day.times.length === 0"
+                <button type="button" class="chip" :class="{ 'is-off': day.times.length === 0 }" :disabled="!anyTime && day.times.length === 0"
                         :aria-pressed="date === day.date" :aria-label="day.label" x-on:click="pickDay(day.date)" x-text="day.chip"></button>
             </template>
             <button type="button" class="chip" x-show="next" x-on:click="shift(next)" aria-label="Další dny">›</button>
@@ -72,7 +75,7 @@
             <button type="button" class="btn btn-outline btn-sm mt-3" x-on:click="load(date)">Zkusit znovu</button>
         </div>
 
-        <div class="empty mt-3" x-show="loaded && !failed && !hasAnySlot">
+        <div class="empty mt-3" x-show="loaded && !failed && !hasAnySlot && !anyTime">
             V těchto dnech není žádný volný termín.
             <template x-if="next">
                 <button type="button" class="btn btn-outline btn-sm mt-3" x-on:click="shift(next)">Zkusit další dny</button>
@@ -84,6 +87,21 @@
                 <button type="button" class="chip" :aria-pressed="time === slot" x-on:click="time = slot" x-text="slot"></button>
             </template>
         </div>
+        <p class="label mt-2" x-show="anyTime && loaded && selectedDay && selectedDay.times.length === 0" x-cloak>Tento den nemá žádný volný termín.</p>
+
+        {{-- Administrace: kadeřnice si zákaznici zapíše i na obsazený čas nebo mimo pracovní dobu. --}}
+        <template x-if="anyTime">
+            <label class="field mt-3" x-show="loaded && date">
+                <span>Jiný čas – i když je obsazeno nebo mimo pracovní dobu</span>
+                <input class="input" type="time" step="300" :value="customTime" x-on:change="setCustomTime($event.target.value)" aria-describedby="wizard-any-time">
+            </label>
+        </template>
+        <p class="banner mt-1 font-normal" id="wizard-any-time" x-show="forced && !needsStaff" x-cloak>
+            Tento čas není mezi volnými termíny – kadeřnice v tu dobu má jinou zákaznici nebo nepracuje. Rezervace se přesto zapíše.
+        </p>
+        <p class="banner banner-danger mt-1 font-normal" x-show="needsStaff" x-cloak>
+            Pro čas mimo volné termíny vyberte nahoře konkrétní kadeřnici.
+        </p>
         @error('date') <div class="field-error">{{ $message }}</div> @enderror
         @error('time') <div class="field-error">{{ $message }}</div> @enderror
     </section>

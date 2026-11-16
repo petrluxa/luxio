@@ -29,6 +29,9 @@ final class BookingWizard
      * Kadeřnice a služby pro průvodce.
      *
      * @param  int|null  $scopeStaffId  token omezený na jednu kadeřnici
+     * Každá kadeřnice má vlastní ceník, proto má služba popisek (délka · cena) pro každou zvlášť
+     * a pro volbu „Kdokoliv“ souhrnný („od“ nejnižší ceny).
+     *
      * @return array{staff: list<array{id: int, name: string}>, services: list<array<string, mixed>>}
      */
     public function options(Salon $salon, ?int $scopeStaffId = null): array
@@ -38,12 +41,18 @@ final class BookingWizard
             ->values();
 
         $services = $salon->services()->where('is_active', true)->get()
-            ->map(fn (Service $service) => [
-                'id' => $service->id,
-                'name' => $service->name,
-                'meta' => $service->durationLabel().' · '.$service->priceLabel(),
-                'staffIds' => $staff->filter(fn (User $u) => $u->services->contains('id', $service->id))->pluck('id')->values()->all(),
-            ])
+            ->map(function (Service $service) use ($staff) {
+                $own = $staff->filter(fn (User $u) => $u->services->contains('id', $service->id))
+                    ->mapWithKeys(fn (User $u) => [$u->id => EffectiveService::for($service, $u)]);
+
+                return [
+                    'id' => $service->id,
+                    'name' => $service->name,
+                    'meta' => $this->commonMeta($service, $own),
+                    'metaByStaff' => $own->map(fn (EffectiveService $s) => Cz::duration($s->totalMinutes()).' · '.Cz::price($s->priceFrom, $s->priceTo))->all(),
+                    'staffIds' => $own->keys()->all(),
+                ];
+            })
             ->filter(fn (array $service) => $service['staffIds'] !== [])
             ->values();
 
@@ -157,6 +166,26 @@ final class BookingWizard
             start: CarbonImmutable::parse($data['date'].' '.$data['time']),
             note: isset($data['note']) && trim($data['note']) !== '' ? trim($data['note']) : null,
         );
+    }
+
+    /**
+     * Popisek služby pro volbu „Kdokoliv“: délka a cena napříč kadeřnicemi, které ji dělají.
+     *
+     * @param  Collection<int, EffectiveService>  $own  služba tak, jak ji dělají jednotlivé kadeřnice
+     */
+    private function commonMeta(Service $service, Collection $own): string
+    {
+        if ($own->isEmpty()) {
+            return $service->durationLabel().' · '.$service->priceLabel();
+        }
+
+        $minutes = $own->map(fn (EffectiveService $s) => $s->totalMinutes());
+        $prices = $own->map(fn (EffectiveService $s) => $s->priceFrom);
+        $from = $prices->min() !== $prices->max()
+            || $own->contains(fn (EffectiveService $s) => $s->priceTo !== null && $s->priceTo > $s->priceFrom);
+
+        return ($minutes->min() === $minutes->max() ? Cz::duration($minutes->min()) : Cz::duration($minutes->min()).' až '.Cz::duration($minutes->max()))
+            .' · '.($from ? 'od ' : '').Cz::money($prices->min());
     }
 
     /**

@@ -35,7 +35,7 @@ class HoursController extends AdminController
         return view('admin.hours', [
             'tab' => 'more',
             'staff' => $staff,
-            'staffList' => $this->user()->isOwner() ? $this->salon()->users()->orderBy('name')->get() : collect([$staff]),
+            'staffList' => $this->user()->isOwner() ? $this->staffList() : collect([$staff]),
             'week' => $week,
             'timeOffs' => $staff->timeOffs()->where('ends_at', '>=', now())->get(),
             'overrides' => $staff->workingHourOverrides()->whereDate('date', '>=', today())->get(),
@@ -134,7 +134,7 @@ class HoursController extends AdminController
         return back()->with('status', 'Výjimka je smazaná.');
     }
 
-    /** Záznam smí smazat jeho kadeřnice, nebo majitelka téhož salonu. */
+    /** Záznam smí smazat jeho kadeřnice, nebo správce téhož salonu. */
     private function authorizeOwnerOf(int $staffId): void
     {
         $me = $this->user();

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Customer;
+use App\Models\Product;
 use App\Models\Salon;
 use App\Models\Service;
 use App\Models\User;
@@ -27,7 +28,7 @@ abstract class AdminController extends Controller
         return $this->user()->salon;
     }
 
-    /** Nastavení salonu a správa kadeřnic patří jen majitelce. */
+    /** Nastavení salonu a správa kadeřnic patří jen správci salonu. */
     protected function ownerOnly(): void
     {
         abort_unless($this->user()->isOwner(), 403);
@@ -78,6 +79,13 @@ abstract class AdminController extends Controller
         return $service;
     }
 
+    protected function ownProduct(Product $product): Product
+    {
+        abort_unless($product->salon_id === $this->user()->salon_id, 404);
+
+        return $product;
+    }
+
     protected function ownStaff(User $staff): User
     {
         abort_unless($staff->salon_id === $this->user()->salon_id, 404);
@@ -86,17 +94,23 @@ abstract class AdminController extends Controller
     }
 
     /**
-     * Čí pracovní dobu a volno smí přihlášená upravovat: majitelka komukoliv
+     * Čí pracovní dobu a volno smí přihlášený upravovat: správce komukoliv
      * v salonu, kadeřnice jen sobě.
      */
     protected function editableStaff(Request $request): User
     {
+        $me = $this->user();
         $id = $request->integer('kadernice');
 
-        if (! $id || $id === $this->user()->id || ! $this->user()->isOwner()) {
-            return $this->user();
+        if (! $me->isOwner() || $id === $me->id) {
+            return $me;
         }
 
-        return $this->ownStaff(User::findOrFail($id));
+        if ($id) {
+            return $this->ownStaff(User::findOrFail($id));
+        }
+
+        // Správce bez vlastních zákaznic nemá co nastavovat sobě – začne první kadeřnicí.
+        return $me->is_bookable ? $me : ($this->staffList()->first() ?? $me);
     }
 }

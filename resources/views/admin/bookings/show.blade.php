@@ -7,7 +7,7 @@
 @section('title', 'Rezervace')
 
 @section('content')
-    <a class="back-link" href="{{ route('admin.calendar', ['datum' => $booking->starts_at->toDateString(), 'kadernice' => $booking->staff_id]) }}">Kalendář</a>
+    <a class="back-link" href="{{ route('admin.calendar', ['datum' => $booking->starts_at->toDateString()]) }}">Rozvrh</a>
     <h1 class="screen-title">{{ Cz::dateTime($booking->starts_at) }}</h1>
 
     @if ($booking->status === BookingStatus::Pending)
@@ -75,6 +75,60 @@
         @endif
     </div>
 
+    {{-- Vyúčtování: použité přípravky, platba a doklad --}}
+    @unless ($booking->status->isCancelled() || $booking->status === BookingStatus::NoShow)
+        <h2 class="section-title">Vyúčtování</h2>
+        <div class="card">
+            @if ($booking->products->isNotEmpty())
+                <span class="label">Použité přípravky</span>
+                <ul class="mb-3 mt-1">
+                    @foreach ($booking->products as $item)
+                        <li>{{ $item->label() }}</li>
+                    @endforeach
+                </ul>
+            @endif
+
+            @if ($booking->isPaid())
+                @php
+                    $receiptUrl = $booking->receiptUrl();
+                    $receiptText = 'Dobrý den, posílám doklad o zaplacení – '.$booking->salon->name.': '.$receiptUrl;
+                @endphp
+                <b class="block text-[20px] font-semibold">Zaplaceno {{ Cz::money($booking->paid_amount) }}</b>
+                <span class="label">{{ $booking->payment_method->label() }} · {{ Cz::date($booking->paid_at) }} · doklad č. {{ $booking->receipt_number }}</span>
+
+                <div class="mt-3 grid gap-2" x-data="{
+                        url: @js($receiptUrl),
+                        text: @js($receiptText),
+                        copied: false,
+                        canShare: typeof navigator.share === 'function',
+                        async share() { try { await navigator.share({ title: @js('Doklad o zaplacení'), text: this.text }); } catch (e) {} },
+                        async copy() {
+                            try { await navigator.clipboard.writeText(this.url); } catch (e) {}
+                            this.copied = true; setTimeout(() => this.copied = false, 2500);
+                        },
+                     }">
+                    <a class="btn btn-primary btn-block" target="_blank" rel="noopener noreferrer"
+                       href="https://wa.me/{{ ltrim((string) $booking->customer->phone, '+') }}?text={{ rawurlencode($receiptText) }}">Poslat doklad přes WhatsApp</a>
+                    <div class="flex gap-2">
+                        <button type="button" class="btn btn-outline btn-sm flex-1" x-show="canShare" x-on:click="share()">Sdílet jinak</button>
+                        <button type="button" class="btn btn-outline btn-sm flex-1" x-on:click="copy()" x-text="copied ? 'Zkopírováno' : 'Kopírovat odkaz'">Kopírovat odkaz</button>
+                        <a class="btn btn-outline btn-sm flex-1" href="{{ $receiptUrl }}" target="_blank" rel="noopener">Zobrazit</a>
+                    </div>
+                </div>
+
+                <a class="btn btn-quiet btn-sm btn-block mt-3" href="{{ route('admin.bookings.checkout', $booking) }}">Upravit vyúčtování</a>
+                <form method="post" action="{{ route('admin.bookings.checkout.revoke', $booking) }}" class="mt-2" x-data="{ sure: false }"
+                      x-on:submit="if (!sure) { $event.preventDefault(); sure = true; setTimeout(() => sure = false, 4000) }">
+                    @csrf
+                    <button class="btn btn-quiet btn-sm btn-block" type="submit" x-text="sure ? 'Opravdu zrušit zaplacení?' : 'Zrušit zaplacení'">Zrušit zaplacení</button>
+                </form>
+            @else
+                <p class="text-muted">{{ $booking->products->isEmpty() ? 'Zatím nevyúčtováno.' : 'Zatím nezaplaceno.' }}</p>
+                <a class="btn btn-primary btn-block mt-3" href="{{ route('admin.bookings.checkout', $booking) }}">Vyúčtovat</a>
+            @endif
+        </div>
+    @endunless
+
     {{-- Poznámka k návštěvě --}}
     <form method="post" action="{{ route('admin.bookings.note', $booking) }}" class="mt-3" id="poznamka">
         @csrf
@@ -99,6 +153,19 @@
         <h2 class="section-title">Změna termínu</h2>
         <div class="grid gap-2" x-data="{ cancelling: false }">
             <a class="btn btn-outline btn-block" href="{{ route('admin.bookings.move', $booking) }}">Přesunout</a>
+
+            @if ($others->isNotEmpty())
+                <form method="post" action="{{ route('admin.bookings.reassign', $booking) }}" class="card">
+                    @csrf
+                    <span class="label">Předat jiné kadeřnici (čas zůstává)</span>
+                    <div class="chips mt-2">
+                        @foreach ($others as $member)
+                            <button class="chip" type="submit" name="kadernice" value="{{ $member->id }}">{{ $member->name }}</button>
+                        @endforeach
+                    </div>
+                    @error('kadernice') <div class="field-error">{{ $message }}</div> @enderror
+                </form>
+            @endif
 
             @if ($booking->status === BookingStatus::Confirmed)
                 <form method="post" action="{{ route('admin.bookings.no-show', $booking) }}">

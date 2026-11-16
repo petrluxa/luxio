@@ -29,11 +29,37 @@
                     <b class="text-[16px] font-semibold">{{ $created ? 'Salon je založený' : 'Salon už existuje' }}</b>
                     <p class="mt-1 text-muted">{{ $salon->name }}</p>
                     <div class="mt-3 grid gap-2">
-                        <a class="btn btn-primary btn-block" href="{{ url('/admin') }}">Přihlásit se do administrace</a>
-                        <a class="btn btn-outline btn-block" href="{{ url('/s/'.$salon->slug) }}">Veřejný odkaz pro zákaznice</a>
+                        <a class="btn btn-primary btn-block" href="{{ url('/admin/login').($login ? '?jmeno='.urlencode($login) : '') }}">Přihlásit se do administrace</a>
+                        <a class="btn btn-outline btn-block" href="{{ url('/s/'.$salon->slug) }}">Stránka pro zákaznice</a>
                     </div>
-                    <p class="label mt-3">V administraci nastavte služby a pracovní dobu. Další kadeřnici přidáte v nabídce Více → Nastavení.</p>
+                    @if ($completed)
+                        <p class="banner mt-3 font-normal" role="status">
+                            Doplněno: kadeřnice {{ $completed['staff'] }}, služby v ceníku {{ $completed['services'] }}, přípravky {{ $completed['products'] }}.
+                        </p>
+                    @endif
+                    @if ($created)
+                        <p class="label mt-3">
+                            Přihlásíte se jménem <b>{{ $login }}</b> a heslem, které jste si právě zvolili.
+                            Salon má vzorový ceník, pracovní dobu po–pá 9–17 a katalog přípravků – vše si upravíte v nabídce Více.
+                        </p>
+                    @endif
                 </div>
+
+                {{-- Prázdný salon (bez ceníku a rezervací) jde jednou dovybavit. --}}
+                @if ($incomplete)
+                    <h2 class="section-title">Dovybavit salon</h2>
+                    <p class="label mb-3">
+                        Salon zatím nemá ceník ani kadeřnice v rozvrhu. Doplní se vzorový ceník, pracovní doba po–pá 9–17
+                        a katalog přípravků – vše si pak upravíte v administraci. Nic se nemaže.
+                    </p>
+                    <form method="post" action="{{ $action }}" novalidate autocomplete="off">
+                        <label class="field">
+                            <span>Kadeřnice – každé jméno na nový řádek (prázdné = kadeřnicí je správce)</span>
+                            <textarea class="input" name="staff" rows="3" maxlength="600" placeholder="Sabina&#10;Šárka"></textarea>
+                        </label>
+                        <button class="btn btn-primary btn-block" type="submit">Dovybavit salon</button>
+                    </form>
+                @endif
             @else
                 <h2 class="section-title">Založit salon</h2>
 
@@ -48,24 +74,28 @@
                 <form method="post" action="{{ $action }}" novalidate autocomplete="off">
                     <label class="field">
                         <span>Název salonu</span>
-                        <input class="input" type="text" name="name" value="{{ $old['name'] ?? '' }}" maxlength="100" placeholder="Kadeřnictví Petra" required>
+                        <input class="input" type="text" name="name" value="{{ $old['name'] ?? '' }}" maxlength="100" placeholder="Kadeřnictví Luxio" required>
                     </label>
                     <label class="field">
-                        <span>Adresa veřejného odkazu (malá písmena bez háčků, např. petra)</span>
-                        <input class="input" type="text" name="slug" value="{{ $old['slug'] ?? '' }}" maxlength="60" autocapitalize="none" required>
+                        <span>Vaše jméno</span>
+                        <input class="input" type="text" name="owner" value="{{ $old['owner'] ?? '' }}" maxlength="60" placeholder="Petr" required>
                     </label>
                     <label class="field">
-                        <span>Jméno majitelky (uvidí ho zákaznice)</span>
-                        <input class="input" type="text" name="owner" value="{{ $old['owner'] ?? '' }}" maxlength="60" placeholder="Petra" required>
+                        <span>Přihlašovací jméno správce (malá písmena bez háčků, např. petr)</span>
+                        <input class="input" type="text" name="login" value="{{ $old['login'] ?? '' }}" maxlength="60" autocapitalize="none" autocorrect="off" spellcheck="false" required>
                     </label>
                     <label class="field">
-                        <span>Přihlašovací e-mail (slouží jen jako jméno pro přihlášení)</span>
-                        <input class="input" type="email" name="email" value="{{ $old['email'] ?? '' }}" maxlength="190" inputmode="email" autocapitalize="none" required>
+                        <span>Heslo (aspoň 8 znaků)</span>
+                        <input class="input" type="password" name="password" minlength="8" autocomplete="new-password" required>
                     </label>
                     <label class="field">
-                        <span>Heslo (aspoň 10 znaků)</span>
-                        <input class="input" type="password" name="password" minlength="10" autocomplete="new-password" required>
+                        <span>Kadeřnice – každé jméno na nový řádek</span>
+                        <textarea class="input" name="staff" rows="3" maxlength="600" placeholder="Sabina&#10;Šárka">{{ $old['staff'] ?? '' }}</textarea>
                     </label>
+                    <p class="label mb-3">
+                        Kadeřnice se objeví v rozvrhu hned. Vlastní přihlášení jim nastavíte v administraci (Více → Kadeřnice).
+                        Když pole necháte prázdné, budete kadeřnicí vy.
+                    </p>
                     <button class="btn btn-primary btn-block mt-2" type="submit">Založit salon</button>
                 </form>
             @endif

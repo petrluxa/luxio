@@ -1,7 +1,10 @@
 # Luxio – rezervační systém pro kadeřnictví
 
-Zákaznice si přes osobní odkaz (bez hesla) rezervují termíny u své kadeřnice, kadeřnice spravuje
-kalendář v administraci. Aplikace je PWA, upozornění chodí jako Web Push na telefon. Žádné SMS ani e-maily.
+Zákaznice si přes osobní odkaz (bez hesla) rezervují termíny u své kadeřnice. Správce salonu a kadeřnice
+mají v administraci rozvrh dne se sloupcem pro každou kadeřnici (rezervace jdou přetahovat myší i prstem),
+každá kadeřnice má svůj ceník, zapisují použité přípravky, vyúčtují návštěvu a pošlou zákaznici doklad
+o zaplacení. Aplikace je PWA, upozornění chodí jako Web Push na
+telefon. Žádné SMS ani e-maily.
 
 - Zadání: [docs/SPEC.md](docs/SPEC.md)
 - Vzhled: [docs/DESIGN.md](docs/DESIGN.md), vzor [docs/design-mockup.html](docs/design-mockup.html)
@@ -26,8 +29,8 @@ php artisan queue:work          # ve druhém okně: odesílá upozornění
 
 Výchozí `.env` používá SQLite, takže není potřeba nic dalšího instalovat. Pro MySQL nastavte `DB_CONNECTION=mysql` a přístupy k databázi.
 
-Ukázková data (jen pro vývoj): administrace `petra@example.com` / `heslo123` (majitelka),
-druhá kadeřnice `lucie@example.com` / `heslo123`, veřejný odkaz `/s/petra`.
+Ukázková data (jen pro vývoj): správce salonu `admin`, kadeřnice `sabina`, `sarka`, `tereza` a modelace
+nehtů `nehty` – heslo všude `heslo123`, veřejný odkaz `/s/luxio`. Do administrace se přihlašuje jménem, ne e-mailem.
 
 Na Windows potřebuje generování klíčů a šifrování upozornění proměnnou `OPENSSL_CONF`
 s cestou k `openssl.cnf` (v balíku PHP ve složce `extras/ssl`).
@@ -85,7 +88,7 @@ hranice dne, víc služeb, souběžná rezervace, státní svátky, lhůty).
    php artisan key:generate        # jen poprvé
    php artisan webpush:vapid       # jen poprvé – změna klíčů zruší všechny odběry upozornění
    php artisan migrate --force
-   php artisan luxio:install       # jen poprvé – založí salon a majitelku s vlastním heslem
+   php artisan luxio:install       # jen poprvé – založí salon, správce s vlastním heslem a kadeřnice
    php artisan config:cache && php artisan route:cache && php artisan view:cache
    ```
 
@@ -113,7 +116,9 @@ hostingu bez SSH a bez cronu:
   z `composer install --no-dev` a `.env`) do její podsložky `_app/`. `index.php` ji tam najde sám;
   přístup zvenku do `_app/` zakazuje `.htaccess` – po nahrání ověřte, že `…/_app/.env` vrací 403.
 - **Instalace**: `LUXIO_SETUP_KEY` zapne adresu `/instalace/{klíč}`. Její otevření připraví databázi
-  (migrace) a při první instalaci nabídne založení salonu s vlastním heslem.
+  (migrace) a při první instalaci nabídne založení salonu: přihlašovací jméno a heslo správce a jména
+  kadeřnic. Salon dostane vzorový ceník, pracovní dobu po–pá 9–17 a katalog přípravků
+  (`database/data/pripravky.json`) – vše se pak upraví v administraci.
 - **Pravidelné úlohy**: `LUXIO_CRON_KEY` zapne adresu `/cron/{klíč}`; časovač hostingu ji má volat
   každých 5 minut (připomínky, uzavírání proběhlých termínů, fronta). Při řidším volání prodlužte
   `REMINDER_WINDOW_MINUTES`.

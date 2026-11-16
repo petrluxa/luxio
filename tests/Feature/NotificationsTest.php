@@ -357,7 +357,7 @@ describe('aplikace na plochu a push odběry', function () {
         $this->actingAs($this->petra)->postJson('/admin/push', $subscription)->assertOk();
 
         expect($this->petra->pushSubscriptions()->count())->toBe(1);
-        $this->get('/admin/vice')->assertSee('Aplikace a upozornění');
+        $this->get('/admin/ucet')->assertSee('Aplikace a upozornění');
     });
 
     test('odběr musí mít platnou adresu a klíče', function () {

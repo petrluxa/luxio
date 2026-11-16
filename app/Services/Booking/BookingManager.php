@@ -35,6 +35,8 @@ final class BookingManager
      *
      * @param  iterable<Service>  $services  v pořadí, v jakém půjdou za sebou
      * @param  Booking|null  $replaces  původní termín při přeplánování zákaznicí (zruší se v témže kroku)
+     * @param  bool  $allowOverlap  kadeřnice si zákaznici zapisuje sama i na obsazený čas nebo mimo pracovní
+     *                              dobu (dělá dvě najednou); vyžaduje konkrétní kadeřnici
      *
      * @throws SlotUnavailableException
      */
@@ -49,6 +51,7 @@ final class BookingManager
         ?string $staffNote = null,
         bool $ignoreLimits = false,
         ?Booking $replaces = null,
+        bool $allowOverlap = false,
     ): Booking {
         $services = collect($services)->values();
         $salon = $customer->salon;
@@ -58,13 +61,15 @@ final class BookingManager
         }
 
         $booking = DB::transaction(function () use (
-            $customer, $salon, $services, $start, $staff, $status, $source, $customerNote, $staffNote, $ignoreLimits, $replaces
+            $customer, $salon, $services, $start, $staff, $status, $source, $customerNote, $staffNote, $ignoreLimits, $replaces, $allowOverlap
         ) {
             $this->lockStaff($this->slots->eligibleStaff($salon, $services->pluck('id'), $staff)->modelKeys());
 
-            $assigned = $staff
-                ? ($this->slots->isFree($salon, $staff, $services, $start, $ignoreLimits, $replaces?->id) ? $staff : null)
-                : $this->slots->pickStaff($salon, $services, $start, $ignoreLimits, $replaces?->id);
+            $assigned = match (true) {
+                $staff && $allowOverlap => $staff,
+                (bool) $staff => $this->slots->isFree($salon, $staff, $services, $start, $ignoreLimits, $replaces?->id) ? $staff : null,
+                default => $this->slots->pickStaff($salon, $services, $start, $ignoreLimits, $replaces?->id),
+            };
 
             if (! $assigned) {
                 throw new SlotUnavailableException;
@@ -174,9 +179,11 @@ final class BookingManager
      * Přesun termínu kadeřnicí – tatáž rezervace, nový čas (případně jiná kadeřnice).
      * Délky se berou ze snapshotu služeb, ne z aktuálního ceníku.
      *
+     * @param  bool  $allowOverlap  přesunout i na obsazený čas nebo mimo pracovní dobu
+     *
      * @throws SlotUnavailableException
      */
-    public function move(Booking $booking, CarbonImmutable $start, ?User $staff = null): void
+    public function move(Booking $booking, CarbonImmutable $start, ?User $staff = null, bool $allowOverlap = false): void
     {
         if (! $booking->status->isActive()) {
             throw new BookingActionException('Tuto rezervaci už nelze přesunout.');
@@ -186,10 +193,10 @@ final class BookingManager
         $previousStart = $booking->starts_at;
         $plan = $booking->plan();
 
-        DB::transaction(function () use ($booking, $start, $staff, $plan) {
+        DB::transaction(function () use ($booking, $start, $staff, $plan, $allowOverlap) {
             $this->lockStaff(array_unique([$staff->id, $booking->staff_id]));
 
-            if (! $this->slots->isFree($booking->salon, $staff, $plan, $start, true, $booking->id)) {
+            if (! $allowOverlap && ! $this->slots->isFree($booking->salon, $staff, $plan, $start, true, $booking->id)) {
                 throw new SlotUnavailableException('V tomto čase už má kadeřnice jinou rezervaci nebo nepracuje.');
             }
 
@@ -197,16 +204,28 @@ final class BookingManager
                 'staff_id' => $staff->id,
                 'starts_at' => $start,
                 'ends_at' => $plan->endsAt($start),
-                'reminder_sent_at' => null,
-                'second_reminder_sent_at' => null,
+                'reminder_sent_at' => $start->equalTo($booking->starts_at) ? $booking->reminder_sent_at : null,
+                'second_reminder_sent_at' => $start->equalTo($booking->starts_at) ? $booking->second_reminder_sent_at : null,
             ]);
 
+            $booking->setRelation('staff', $staff);
             $this->writeSegments($booking, $plan);
         });
 
+        // Zákaznici se oznamuje změna času; samotná výměna kadeřnice ve stejný čas ne.
         if (! $previousStart->equalTo($start)) {
             BookingMoved::dispatch($booking, $previousStart, false);
         }
+    }
+
+    /**
+     * Je daný začátek u kadeřnice volný (pro upozornění „děláte dvě najednou“)?
+     *
+     * @param  iterable<Service>|ServicePlan  $services
+     */
+    public function isFree(User $staff, iterable|ServicePlan $services, CarbonImmutable $start, ?int $ignoreBookingId = null): bool
+    {
+        return $this->slots->isFree($staff->salon, $staff, $services, $start, true, $ignoreBookingId);
     }
 
     public function markNoShow(Booking $booking): void

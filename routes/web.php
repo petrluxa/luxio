@@ -6,6 +6,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\PublicBookingController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\PwaController;
+use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\RecoverController;
 use Illuminate\Support\Facades\Route;
 
@@ -65,7 +66,17 @@ Route::get('/obnovit', RecoverController::class)->name('recover');
 
 /*
 |--------------------------------------------------------------------------
-| Administrace kadeřnice
+| Doklad o zaplacení (odkaz, který kadeřnice pošle zákaznici)
+|--------------------------------------------------------------------------
+*/
+Route::get('/doklad/{booking}/{code}', ReceiptController::class)
+    ->whereNumber('booking')->where('code', '[0-9a-f]{32}')
+    ->middleware('throttle:30,1')
+    ->name('receipt');
+
+/*
+|--------------------------------------------------------------------------
+| Administrace salonu (správce a kadeřnice)
 |--------------------------------------------------------------------------
 */
 Route::prefix('admin')->name('admin.')->group(function () {

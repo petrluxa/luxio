@@ -125,16 +125,24 @@ describe('hlavičky a vyhledávače', function () {
 });
 
 describe('instalace na ostrém serveru', function () {
-    test('ukázková data pro vývoj se naplní: dvě kadeřnice, zákaznice a rezervace u obou', function () {
+    test('ukázková data pro vývoj se naplní: správce, kadeřnice, modelace nehtů, přípravky a vyúčtované návštěvy', function () {
         $this->artisan('db:seed')->assertSuccessful();
 
-        $salon = Salon::where('slug', 'petra')->sole();
+        $salon = Salon::where('slug', 'luxio')->sole();
         $bookings = Booking::where('salon_id', $salon->id);
 
-        expect($salon->staff()->pluck('name')->all())->toEqualCanonicalizing(['Petra', 'Lucie'])
+        expect($salon->staff()->pluck('name')->all())->toEqualCanonicalizing(['Sabina', 'Šárka', 'Tereza', 'Modelace nehtů'])
+            ->and($salon->users()->where('role', UserRole::Owner)->sole())->login->toBe('admin')->is_bookable->toBeFalse()
             ->and($salon->customers()->count())->toBe(20)
+            ->and($salon->products()->count())->toBeGreaterThan(100)
             ->and($bookings->count())->toBeGreaterThan(50)
-            ->and($bookings->distinct()->pluck('staff_id'))->toHaveCount(2);
+            ->and($bookings->distinct()->pluck('staff_id'))->toHaveCount(4)
+            ->and(Booking::where('salon_id', $salon->id)->whereNotNull('paid_at')->count())->toBeGreaterThan(10);
+
+        // Čísla dokladů se neopakují.
+        $numbers = Booking::where('salon_id', $salon->id)->whereNotNull('receipt_number')->pluck('receipt_number');
+
+        expect($numbers->unique()->count())->toBe($numbers->count());
     });
 
     test('ukázková data se známým heslem se na ostrém serveru nevytvoří', function () {
@@ -142,21 +150,22 @@ describe('instalace na ostrém serveru', function () {
 
         $this->artisan('db:seed', ['--force' => true])->assertSuccessful();
 
-        expect(User::where('email', 'petra@example.com')->exists())->toBeFalse();
+        expect(User::where('login', 'admin')->exists())->toBeFalse()->and(Salon::where('slug', 'luxio')->exists())->toBeFalse();
     });
 
-    test('luxio:install založí salon a majitelku s vlastním heslem', function () {
+    test('luxio:install založí salon a správce s vlastním heslem', function () {
         $this->artisan('luxio:install')
             ->expectsQuestion('Název salonu', 'Salon Eva')
-            ->expectsQuestion('Adresa veřejného odkazu (/s/…)', 'salon-eva')
-            ->expectsQuestion('Jméno majitelky (uvidí ho zákaznice)', 'Eva')
-            ->expectsQuestion('Přihlašovací e-mail', 'Eva@Example.com')
-            ->expectsQuestion('Heslo (aspoň 10 znaků)', 'velmi-tajne-heslo')
+            ->expectsQuestion('Vaše jméno', 'Eva')
+            ->expectsQuestion('Přihlašovací jméno správce (malá písmena bez háčků)', 'Eva')
+            ->expectsQuestion('Heslo (aspoň 8 znaků)', 'velmi-tajne-heslo')
+            ->expectsQuestion('Kadeřnice – jména oddělená čárkou (prázdné = kadeřnicí je správce)', '')
             ->assertSuccessful();
 
-        $eva = User::where('email', 'eva@example.com')->sole();
+        $eva = User::where('login', 'eva')->sole();
 
         expect($eva->role)->toBe(UserRole::Owner)
+            ->and($eva->is_bookable)->toBeTrue()
             ->and($eva->salon->slug)->toBe('salon-eva')
             ->and(Hash::check('velmi-tajne-heslo', $eva->password))->toBeTrue();
     });
@@ -164,12 +173,12 @@ describe('instalace na ostrém serveru', function () {
     test('krátké heslo instalace odmítne', function () {
         $this->artisan('luxio:install')
             ->expectsQuestion('Název salonu', 'Salon Eva')
-            ->expectsQuestion('Adresa veřejného odkazu (/s/…)', 'salon-eva')
-            ->expectsQuestion('Jméno majitelky (uvidí ho zákaznice)', 'Eva')
-            ->expectsQuestion('Přihlašovací e-mail', 'eva@example.com')
-            ->expectsQuestion('Heslo (aspoň 10 znaků)', 'kratke')
+            ->expectsQuestion('Vaše jméno', 'Eva')
+            ->expectsQuestion('Přihlašovací jméno správce (malá písmena bez háčků)', 'eva')
+            ->expectsQuestion('Heslo (aspoň 8 znaků)', 'kratke')
+            ->expectsQuestion('Kadeřnice – jména oddělená čárkou (prázdné = kadeřnicí je správce)', '')
             ->assertFailed();
 
-        expect(Salon::where('slug', 'salon-eva')->exists())->toBeFalse();
+        expect(Salon::where('name', 'Salon Eva')->exists())->toBeFalse();
     });
 });

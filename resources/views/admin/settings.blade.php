@@ -4,7 +4,7 @@
 @section('title', 'Nastavení')
 
 @section('content')
-    <a class="back-link" href="{{ route('admin.more') }}">Více</a>
+    <a class="back-link" href="{{ route('admin.more') }}">Admin</a>
     <h1 class="screen-title">Nastavení</h1>
 
     <form method="post" action="{{ route('admin.settings.update') }}" novalidate>
@@ -25,13 +25,25 @@
             <span>Adresa</span>
             <input class="input" type="text" name="address" value="{{ old('address', $salon->address) }}" maxlength="255">
         </label>
+        <div class="grid grid-cols-[1fr_130px] gap-3">
+            <label class="field">
+                <span>Provozovatel (na doklad)</span>
+                <input class="input" type="text" name="company" value="{{ old('company', $salon->company) }}" maxlength="160" placeholder="Jméno nebo firma">
+            </label>
+            <label class="field">
+                <span>IČO</span>
+                <input class="input" type="text" name="ico" value="{{ old('ico', $salon->ico) }}" inputmode="numeric" maxlength="10">
+            </label>
+        </div>
+        @error('company') <div class="field-error">{{ $message }}</div> @enderror
+        @error('ico') <div class="field-error">{{ $message }}</div> @enderror
         <label class="field">
             <span>Adresa veřejného odkazu: {{ url('/s') }}/…</span>
             <input class="input" type="text" name="slug" value="{{ old('slug', $salon->slug) }}" maxlength="60" autocapitalize="none" autocomplete="off" required>
             @error('slug') <div class="field-error">{{ $message }}</div> @enderror
         </label>
 
-        <h2 class="section-title">Pravidla rezervací</h2>
+        <h2 class="section-title scroll-mt-24" id="pravidla">Pravidla rezervací</h2>
         <label class="field">
             <span>Krok nabídky časů</span>
             <select class="input" name="slot_step">
@@ -75,16 +87,8 @@
         <button class="btn btn-primary btn-block mt-3" type="submit">Uložit nastavení</button>
     </form>
 
-    <h2 class="section-title mt-6">Kadeřnice</h2>
-    @foreach ($users as $member)
-        <a class="row" href="{{ route('admin.staff.edit', $member) }}">
-            <span class="h-3 w-3 flex-none rounded-full" style="background: {{ $member->color }}" aria-hidden="true"></span>
-            <span class="row-main">
-                <b>{{ $member->name }}</b>
-                <span>{{ $member->role->label() }} · {{ $member->email }}@if (! $member->is_bookable) · nepřijímá rezervace @endif</span>
-            </span>
-            @include('partials.icon', ['name' => 'chevron', 'size' => 20, 'class' => 'text-muted'])
-        </a>
-    @endforeach
-    <a class="btn btn-outline btn-block mt-3" href="{{ route('admin.staff.create') }}">Přidat kadeřnici</a>
+    <a class="row mt-6" href="{{ route('admin.staff.index') }}">
+        <span class="row-main"><b>Kadeřnice</b><span>Kdo je v rozvrhu a kdo se umí přihlásit</span></span>
+        @include('partials.icon', ['name' => 'chevron', 'size' => 20, 'class' => 'text-muted'])
+    </a>
 @endsection

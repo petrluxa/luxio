@@ -10,7 +10,9 @@ use App\Events\BookingCancelled;
 use App\Events\BookingCreated;
 use App\Events\BookingMoved;
 use App\Events\BookingRejected;
+use App\Enums\UserRole;
 use App\Models\Booking;
+use App\Models\User;
 use App\Notifications\BookingNotification;
 use Carbon\CarbonImmutable;
 use Illuminate\Events\Dispatcher;
@@ -27,6 +29,9 @@ use Throwable;
  *  přesun zákaznicí              → kadeřnice
  *
  * O tom, co kadeřnice udělala sama v administraci, už upozornění nedostává.
+ *
+ * Co jde kadeřnici, dostane i správce salonu, který sám zákaznice nemá (recepce) – a to
+ * se jménem kadeřnice. Jinak by se o rezervaci u kadeřnice bez vlastního přihlášení nikdo nedozvěděl.
  */
 class SendBookingNotifications
 {
@@ -99,6 +104,17 @@ class SendBookingNotifications
     private function toStaff(Booking $booking, BookingNotice $notice, ?CarbonImmutable $previousStart = null): void
     {
         $this->send($booking->staff, new BookingNotification($booking, $notice, $previousStart));
+
+        $reception = User::query()
+            ->where('salon_id', $booking->salon_id)
+            ->where('role', UserRole::Owner)
+            ->where('is_bookable', false)
+            ->whereKeyNot($booking->staff_id)
+            ->get();
+
+        foreach ($reception as $manager) {
+            $this->send($manager, new BookingNotification($booking, $notice, $previousStart, withStaff: true));
+        }
     }
 
     /**

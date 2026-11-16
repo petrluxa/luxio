@@ -5,59 +5,128 @@ namespace App\Http\Controllers\Admin;
 use App\Models\Service;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 /**
- * Služby: ceník, délky fází (práce – pauza – práce), úklid a pořadí.
- * Ceník upravuje majitelka; každá kadeřnice si u služby nastaví, jestli ji dělá,
- * a případně vlastní cenu a délky.
+ * Ceník. Každá kadeřnice má svůj: zaškrtne, které služby dělá, a nastaví si vlastní cenu
+ * a délky (práce – pauza – práce). Správce vidí a upraví ceník kterékoliv kadeřnice.
+ *
+ * Služba sama (název, popis, výchozí cena a délky, úklid, pořadí) je společná pro salon.
+ * Novou službu může přidat i kadeřnice – dostane ji do svého ceníku; výchozí hodnoty služby,
+ * kterou dělá jen ona, si upraví sama, ostatní společné služby upravuje správce.
  */
 class ServiceController extends AdminController
 {
-    public function index(): View
+    public function index(Request $request): View
     {
-        $mine = $this->user()->services()->pluck('services.id')->all();
+        $staff = $this->editableStaff($request);
 
         return view('admin.services.index', [
             'tab' => 'more',
-            'services' => $this->salon()->services()->get(),
-            'mine' => $mine,
-            'canEdit' => $this->user()->isOwner(),
+            'width' => 'wide',
+            'staff' => $staff,
+            'staffList' => $this->user()->isOwner() ? $this->staffList() : collect([$staff]),
+            'services' => $this->salon()->services()->withCount('staff')->get(),
+            'mine' => $staff->services()->get()->keyBy('id'),
+            'isOwner' => $this->user()->isOwner(),
+            'editable' => fn (Service $service) => $this->canEditBase($service),
         ]);
     }
 
-    public function create(): View
+    /** Uloží celý ceník jedné kadeřnice najednou: co dělá, za kolik a jak dlouho. */
+    public function prices(Request $request): RedirectResponse
     {
-        $this->ownerOnly();
+        $staff = $this->editableStaff($request);
 
-        return view('admin.services.form', ['tab' => 'more', 'service' => new Service(['is_active' => true, 'work_1' => 30]), 'pivot' => null, 'offers' => true]);
+        $data = $request->validate([
+            'rows' => ['nullable', 'array'],
+            'rows.*.price' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'rows.*.work_1' => ['nullable', 'integer', 'min:5', 'max:600'],
+            'rows.*.pause' => ['nullable', 'integer', 'min:0', 'max:600'],
+            'rows.*.work_2' => ['nullable', 'integer', 'min:0', 'max:600'],
+        ], [], ['rows.*.price' => 'cena', 'rows.*.work_1' => 'délka práce', 'rows.*.pause' => 'pauza', 'rows.*.work_2' => 'délka druhé práce']);
+
+        $sync = [];
+
+        foreach ($this->salon()->services()->get() as $service) {
+            $row = $request->input("rows.{$service->id}");
+
+            if (! is_array($row) || empty($row['offers'])) {
+                continue;
+            }
+
+            // Co se shoduje s výchozí hodnotou služby, se neukládá – změna výchozí hodnoty se pak projeví i tady.
+            $own = function (string $key, int $base) use ($data, $service): ?int {
+                $value = $data['rows'][$service->id][$key] ?? null;
+
+                return $value === null || (int) $value === $base ? null : (int) $value;
+            };
+
+            $sync[$service->id] = [
+                'price_from' => $own('price', $service->price_from),
+                'work_1' => $own('work_1', $service->work_1),
+                'pause' => $own('pause', $service->pause),
+                'work_2' => $own('work_2', $service->work_2),
+            ];
+        }
+
+        $staff->services()->sync($sync);
+
+        return back()->with('status', 'Ceník – '.$staff->name.' – je uložený.');
+    }
+
+    public function create(Request $request): View
+    {
+        return view('admin.services.form', [
+            'tab' => 'more',
+            'service' => new Service(['is_active' => true, 'work_1' => 30]),
+            'staffList' => $this->user()->isOwner() ? $this->staffList() : collect(),
+            // Kdo novou službu dostane do ceníku: kadeřnice, u které správce právě je.
+            'checked' => [$this->editableStaff($request)->id],
+            'for' => $this->editableStaff($request),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        $this->ownerOnly();
+        $me = $this->user();
 
         $service = Service::create($this->validated($request) + [
             'salon_id' => $this->salon()->id,
             'sort' => (int) $this->salon()->services()->max('sort') + 1,
         ]);
 
-        // Novou službu rovnou dostanou všechny kadeřnice salonu.
-        $service->staff()->attach($this->staffList()->modelKeys());
+        // Kadeřnice přidává službu sobě; správce vybírá, které kadeřnice ji dělají.
+        $staffIds = $me->isOwner()
+            ? $this->staffList()->modelKeys()
+            : [$me->id];
 
-        return redirect()->route('admin.services.index')->with('status', 'Služba je přidaná.');
+        if ($me->isOwner()) {
+            $picked = $request->validate(['staff' => ['nullable', 'array'], 'staff.*' => ['integer', Rule::in($staffIds)]])['staff'] ?? [];
+            $staffIds = array_map('intval', $picked);
+        }
+
+        $service->staff()->attach($staffIds);
+
+        return redirect()->route('admin.services.index', $this->staffQuery($request))->with('status', 'Služba je přidaná.');
     }
 
-    public function edit(Service $service): View
+    public function edit(Request $request, Service $service): View|RedirectResponse
     {
         $service = $this->ownService($service);
-        $pivot = $this->user()->services()->whereKey($service->id)->first()?->pivot;
+
+        if (! $this->canEditBase($service)) {
+            return redirect()->route('admin.services.index')
+                ->with('error', 'Společnou službu upravuje správce salonu. Svoji cenu a délku si nastavíte přímo v ceníku.');
+        }
 
         return view('admin.services.form', [
             'tab' => 'more',
             'service' => $service,
-            'pivot' => $pivot,
-            'offers' => $pivot !== null,
+            'staffList' => collect(),
+            'checked' => [],
+            'for' => $this->editableStaff($request),
         ]);
     }
 
@@ -65,13 +134,11 @@ class ServiceController extends AdminController
     {
         $service = $this->ownService($service);
 
-        if ($this->user()->isOwner()) {
-            $service->update($this->validated($request));
-        }
+        abort_unless($this->canEditBase($service), 403);
 
-        $this->syncMine($request, $service);
+        $service->update($this->validated($request));
 
-        return redirect()->route('admin.services.index')->with('status', 'Služba je uložená.');
+        return redirect()->route('admin.services.index', $this->staffQuery($request))->with('status', 'Služba je uložená.');
     }
 
     /** Posun v ceníku o jedno místo nahoru / dolů. */
@@ -96,30 +163,29 @@ class ServiceController extends AdminController
         return back();
     }
 
-    /** „Tuto službu dělám“ + vlastní cena a délky přihlášené kadeřnice. */
-    private function syncMine(Request $request, Service $service): void
+    /**
+     * Výchozí hodnoty služby smí měnit správce, nebo kadeřnice u služby, kterou dělá jen ona
+     * (typicky si ji sama přidala).
+     */
+    private function canEditBase(Service $service): bool
     {
         $me = $this->user();
 
-        if (! $request->boolean('offers')) {
-            $me->services()->detach($service->id);
-
-            return;
+        if ($me->isOwner()) {
+            return true;
         }
 
-        $own = $request->validate([
-            'own_price' => ['nullable', 'integer', 'min:0', 'max:100000'],
-            'own_work_1' => ['nullable', 'integer', 'min:5', 'max:600'],
-            'own_pause' => ['nullable', 'integer', 'min:0', 'max:600'],
-            'own_work_2' => ['nullable', 'integer', 'min:0', 'max:600'],
-        ]);
+        $providers = $service->staff()->pluck('users.id');
 
-        $me->services()->syncWithoutDetaching([$service->id => [
-            'price_from' => $own['own_price'] ?? null,
-            'work_1' => $own['own_work_1'] ?? null,
-            'pause' => $own['own_pause'] ?? null,
-            'work_2' => $own['own_work_2'] ?? null,
-        ]]);
+        return $providers->count() === 1 && $providers->first() === $me->id;
+    }
+
+    /** Správce se po uložení vrací do ceníku kadeřnice, u které byl. */
+    private function staffQuery(Request $request): array
+    {
+        $staff = $this->editableStaff($request);
+
+        return $staff->is($this->user()) ? [] : ['kadernice' => $staff->id];
     }
 
     private function validated(Request $request): array

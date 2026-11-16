@@ -13,21 +13,21 @@ use Illuminate\Notifications\Notifiable;
 use NotificationChannels\WebPush\HasPushSubscriptions;
 
 /**
- * Kadeřnice nebo majitelka salonu.
+ * Správce salonu nebo kadeřnice. Přihlašuje se jménem (`login`) a heslem;
+ * kadeřnice bez přihlašovacích údajů je jen v rozvrhu a sama se nepřihlásí.
  */
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasPushSubscriptions, Notifiable;
 
-    protected $fillable = ['salon_id', 'name', 'email', 'password', 'role', 'color', 'is_bookable'];
+    protected $fillable = ['salon_id', 'name', 'login', 'password', 'role', 'color', 'is_bookable'];
 
     protected $hidden = ['password', 'remember_token'];
 
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => UserRole::class,
             'is_bookable' => 'boolean',
@@ -37,6 +37,12 @@ class User extends Authenticatable
     public function isOwner(): bool
     {
         return $this->role === UserRole::Owner;
+    }
+
+    /** Má vlastní přihlášení do administrace? */
+    public function canLogIn(): bool
+    {
+        return $this->login !== null && $this->password !== null;
     }
 
     public function salon(): BelongsTo

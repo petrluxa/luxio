@@ -5,10 +5,12 @@
  *
  * config = {
  *   staff:    [{ id, name }],
- *   services: [{ id, name, meta, staffIds }],
+ *   services: [{ id, name, meta, metaByStaff, staffIds }],   – meta = délka · cena; každá kadeřnice má svůj ceník,
  *   slotsUrl: adresa pro načtení termínů,
  *   replaces: id přesouvané rezervace | null,
  *   fixed:    true = služby jsou dané (přesun termínu v administraci), vybírá se jen den a čas,
+ *   anyTime:  true = administrace: jde zadat i čas mimo volné termíny (kadeřnice dělá dvě
+ *             zákaznice najednou nebo pracuje mimo svou dobu); formulář pak pošle force=1,
  *   selected: { staffId, serviceIds, date, time }   – předvýběr / návrat po chybě
  * }
  */
@@ -16,6 +18,7 @@ export default (config) => ({
     staff: config.staff,
     services: config.services,
     fixed: config.fixed === true,
+    anyTime: config.anyTime === true,
 
     staffId: null,
     serviceIds: [],
@@ -68,6 +71,11 @@ export default (config) => ({
         return this.services.filter((s) => s.staffIds.includes(this.staffId));
     },
 
+    /** Délka a cena služby u vybrané kadeřnice (u volby „Kdokoliv“ souhrnně). */
+    metaFor(service) {
+        return (this.staffId !== null && service.metaByStaff?.[this.staffId]) || service.meta;
+    },
+
     get selectedDay() {
         return this.days.find((d) => d.date === this.date) ?? null;
     },
@@ -102,8 +110,23 @@ export default (config) => ({
         return this.selectedDay && this.time ? `${this.selectedDay.label} v ${this.time}` : '';
     },
 
+    /** Vybraný čas není mezi volnými termíny (zadaný ručně nebo ťuknutím do obsazeného místa). */
+    get forced() {
+        return this.anyTime && this.time !== null && !(this.selectedDay?.times ?? []).includes(this.time);
+    },
+
+    /** Hodnota pole „Jiný čas“ (HH:MM). */
+    get customTime() {
+        return this.forced ? this.time.padStart(5, '0') : '';
+    },
+
+    /** Čas mimo volné termíny jde zapsat jen konkrétní kadeřnici, ne volbě „Kdokoliv“. */
+    get needsStaff() {
+        return this.forced && this.staffId === null;
+    },
+
     get ready() {
-        return this.hasSelection && this.date !== null && this.time !== null && !this.submitting;
+        return this.hasSelection && this.date !== null && this.time !== null && !this.needsStaff && !this.submitting;
     },
 
     pickStaff(id) {
@@ -128,6 +151,13 @@ export default (config) => ({
         this.time = null;
         this.wantedDate = null;
         this.wantedTime = null;
+    },
+
+    /** Ručně zadaný čas z pole „Jiný čas“: 09:05 → 9:05, prázdné pole výběr zruší. */
+    setCustomTime(value) {
+        const match = /^(\d{1,2}):(\d{2})$/.exec(value ?? '');
+
+        this.time = match ? `${parseInt(match[1], 10)}:${match[2]}` : null;
     },
 
     /** Změna kadeřnice nebo služeb: výběr termínu už neplatí, načíst znovu od dneška. */
@@ -203,13 +233,16 @@ export default (config) => ({
             const stillValid = keepSelection && this.selectedDay && this.selectedDay.times.includes(this.time);
 
             if (!stillValid) {
-                const keepDay = keepSelection && this.selectedDay && this.selectedDay.times.length > 0;
-                const wanted = this.days.find((d) => d.date === this.wantedDate && d.times.length > 0);
+                // V administraci platí i den bez volného termínu a čas mimo nabídku.
+                const usable = (d) => this.anyTime || d.times.length > 0;
+                const keepDay = keepSelection && this.selectedDay && usable(this.selectedDay);
+                const wanted = this.days.find((d) => d.date === this.wantedDate && usable(d));
+                const first = this.days.find((d) => d.times.length > 0) ?? (this.anyTime ? this.days[0] : null);
 
                 this.time = null;
-                this.date = keepDay ? this.date : (wanted ?? this.days.find((d) => d.times.length > 0))?.date ?? null;
+                this.date = keepDay ? this.date : (wanted ?? first)?.date ?? null;
 
-                if (wanted && this.date === wanted.date && wanted.times.includes(this.wantedTime)) {
+                if (wanted && this.date === wanted.date && this.wantedTime && (this.anyTime || wanted.times.includes(this.wantedTime))) {
                     this.time = this.wantedTime;
                 }
             }

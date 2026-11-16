@@ -11,7 +11,7 @@ use function Laravel\Prompts\password;
 use function Laravel\Prompts\text;
 
 /**
- * Založení salonu a účtu majitelky na ostrém serveru. Heslo se zadává při instalaci
+ * Založení salonu a účtu správce na ostrém serveru. Heslo se zadává při instalaci
  * (skrytě), žádné výchozí heslo neexistuje. Ukázková data (`db:seed`) jsou jen pro vývoj.
  *
  * Na hostingu bez příkazové řádky totéž udělá adresa /instalace/{klíč} (config/luxio.php).
@@ -20,18 +20,18 @@ class InstallSalon extends Command
 {
     protected $signature = 'luxio:install';
 
-    protected $description = 'Založí salon a účet majitelky (ostrý provoz)';
+    protected $description = 'Založí salon a účet správce (ostrý provoz)';
 
     public function handle(SalonInstaller $installer): int
     {
-        $name = text('Název salonu', placeholder: 'Kadeřnictví Petra', required: true);
-        $slug = text('Adresa veřejného odkazu (/s/…)', default: Str::slug($name), required: true);
-        $owner = text('Jméno majitelky (uvidí ho zákaznice)', placeholder: 'Petra', required: true);
-        $email = text('Přihlašovací e-mail', required: true);
-        $secret = password('Heslo (aspoň 10 znaků)', required: true);
+        $name = text('Název salonu', placeholder: 'Kadeřnictví Luxio', required: true);
+        $owner = text('Vaše jméno', placeholder: 'Petr', required: true);
+        $login = text('Přihlašovací jméno správce (malá písmena bez háčků)', required: true);
+        $secret = password('Heslo (aspoň 8 znaků)', required: true);
+        $staff = text('Kadeřnice – jména oddělená čárkou (prázdné = kadeřnicí je správce)');
 
         $validator = Validator::make(
-            ['name' => $name, 'slug' => $slug, 'owner' => $owner, 'email' => $email, 'password' => $secret],
+            ['name' => $name, 'owner' => $owner, 'login' => Str::lower(trim($login)), 'password' => $secret, 'staff' => $staff],
             $installer->rules(),
             $installer->messages(),
         );
@@ -44,12 +44,12 @@ class InstallSalon extends Command
             return self::FAILURE;
         }
 
-        $installer->install($validator->validated());
+        $salon = $installer->install($validator->validated());
 
         $this->info('Salon je založený.');
         $this->line('  Administrace:  '.url('/admin'));
-        $this->line('  Veřejný odkaz: '.url('/s/'.$slug));
-        $this->line('Dál v administraci nastavte služby a pracovní dobu.');
+        $this->line('  Veřejný odkaz: '.url('/s/'.$salon->slug));
+        $this->line('Salon má vzorový ceník, pracovní dobu po–pá 9–17 a katalog přípravků. Vše upravíte v administraci.');
 
         return self::SUCCESS;
     }

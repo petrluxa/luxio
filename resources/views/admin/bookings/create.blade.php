@@ -3,7 +3,7 @@
 @section('title', 'Nová rezervace')
 
 @section('content')
-    <a class="back-link" href="{{ route('admin.calendar') }}">Kalendář</a>
+    <a class="back-link" href="{{ route('admin.calendar') }}">Rozvrh</a>
     <h1 class="screen-title">Nová rezervace</h1>
 
     @if (empty($wizard['services']))

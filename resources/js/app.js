@@ -1,11 +1,13 @@
 import Alpine from 'alpinejs';
 import bookingWizard from './booking-wizard';
+import calendarBoard from './calendar-board';
 import pushSetup from './push';
 import { registerWorker } from './worker';
 
 window.Alpine = Alpine;
 
 Alpine.data('bookingWizard', bookingWizard);
+Alpine.data('calendarBoard', calendarBoard);
 Alpine.data('pushSetup', pushSetup);
 
 Alpine.start();

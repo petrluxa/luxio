@@ -72,7 +72,7 @@ return [
     'attributes' => [
         'name' => 'jméno',
         'phone' => 'telefon',
-        'email' => 'e-mail',
+        'login' => 'přihlašovací jméno',
         'password' => 'heslo',
         'consent' => 'souhlas',
         'services' => 'služba',

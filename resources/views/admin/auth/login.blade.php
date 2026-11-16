@@ -5,7 +5,7 @@
 @section('body')
     <main class="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-[18px] py-8">
         <h1 class="screen-title">Přihlášení</h1>
-        <p class="mb-5 text-muted">Administrace pro kadeřnice.</p>
+        <p class="mb-5 text-muted">Administrace salonu – správce a kadeřnice.</p>
 
         @include('partials.flash')
 
@@ -13,14 +13,15 @@
             @csrf
 
             <label class="field">
-                <span>E-mail</span>
-                <input class="input" type="email" name="email" value="{{ old('email') }}" autocomplete="username" inputmode="email" required autofocus>
-                @error('email') <div class="field-error">{{ $message }}</div> @enderror
+                <span>Přihlašovací jméno</span>
+                <input class="input" type="text" name="login" value="{{ old('login', $login ?? '') }}" autocomplete="username"
+                       autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="190" required @if (! old('login', $login ?? '')) autofocus @endif>
+                @error('login') <div class="field-error">{{ $message }}</div> @enderror
             </label>
 
             <label class="field">
                 <span>Heslo</span>
-                <input class="input" type="password" name="password" autocomplete="current-password" required>
+                <input class="input" type="password" name="password" autocomplete="current-password" required @if (old('login', $login ?? '')) autofocus @endif>
                 @error('password') <div class="field-error">{{ $message }}</div> @enderror
             </label>
 
