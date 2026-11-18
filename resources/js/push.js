@@ -25,6 +25,7 @@ export default (config) => ({
     canPrompt: false,
     busy: false,
     error: '',
+    stillDenied: false, // uživatel říká, že upozornění v telefonu povolil, ale telefon je dál hlásí jako zakázaná
     installEvent: null,
 
     async init() {
@@ -48,6 +49,27 @@ export default (config) => ({
             this.installEvent = null;
             this.standalone = true;
         });
+
+        // Kdo si upozornění povolí v nastavení telefonu a vrátí se do aplikace, má to vidět hned –
+        // aplikace z plochy se sama znovu nenačte.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                this.refresh();
+            }
+        });
+        window.addEventListener('pageshow', () => this.refresh());
+
+        await this.refresh();
+    },
+
+    /** Načte aktuální stav: povolení od telefonu a jestli má zařízení platný odběr. */
+    async refresh() {
+        this.standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+        this.permission = 'Notification' in window ? Notification.permission : 'denied';
+
+        if (this.permission !== 'denied') {
+            this.stillDenied = false;
+        }
 
         if (!this.supported) {
             return;
@@ -96,11 +118,18 @@ export default (config) => ({
         this.busy = true;
 
         try {
+            const before = Notification.permission;
+
             this.permission = await Notification.requestPermission();
 
             if (this.permission !== 'granted') {
+                // Telefon se už neptá (dřív odmítnuto) – ukázat, jak dál, místo tichého nic.
+                this.stillDenied = this.permission === 'denied' && before === 'denied';
+
                 return;
             }
+
+            this.stillDenied = false;
 
             const registration = await this.registration();
             const subscription =

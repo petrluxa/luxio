@@ -93,9 +93,37 @@
                 <button type="button" class="btn btn-primary btn-block mt-3" x-show="!subscribed && permission !== 'denied'"
                         x-on:click="enable()" :disabled="busy">Povolit upozornění</button>
 
-                <p class="mt-3 text-muted" x-show="permission === 'denied'">
-                    Upozornění máte pro tuto aplikaci zakázaná. Povolíte je v nastavení telefonu (Oznámení).
-                </p>
+                {{-- Telefon má upozornění pro aplikaci vypnutá (dřív odmítnuto): sama se zeptat nesmí,
+                     proto přesný postup a tlačítko, které to po povolení dokončí. --}}
+                <div x-show="permission === 'denied'" x-cloak>
+                    <p class="mt-3">
+                        Telefon má pro tuto aplikaci upozornění vypnutá, proto se na ně nemůže zeptat sama. Zapnete je takto:
+                    </p>
+
+                    <ol class="mt-2 grid list-decimal gap-1 pl-5" x-show="platform === 'ios'">
+                        <li>V iPhonu otevřete <b class="font-semibold">Nastavení → Oznámení</b>.</li>
+                        <li>V seznamu najděte tuto aplikaci (jmenuje se stejně jako ikona na ploše) a zapněte <b class="font-semibold">Povolit oznámení</b>.</li>
+                        <li>Vraťte se sem a ťukněte na tlačítko pod tímto textem.</li>
+                    </ol>
+
+                    <ol class="mt-2 grid list-decimal gap-1 pl-5" x-show="platform === 'android'">
+                        <li>Podržte prst na ikoně aplikace a zvolte <b class="font-semibold">Informace o aplikaci → Oznámení</b>.</li>
+                        <li>Oznámení zapněte.</li>
+                        <li>Vraťte se sem a ťukněte na tlačítko pod tímto textem.</li>
+                    </ol>
+
+                    <p class="mt-2" x-show="platform === 'desktop'">
+                        V prohlížeči klikněte vlevo vedle adresy na ikonu nastavení stránky, u Oznámení zvolte Povolit a klikněte na tlačítko pod tímto textem.
+                    </p>
+
+                    <button type="button" class="btn btn-primary btn-block mt-3" x-on:click="enable()" :disabled="busy">Už mám povoleno – zapnout upozornění</button>
+
+                    <p class="banner mt-3 font-normal" x-show="stillDenied" x-cloak>
+                        Telefon upozornění pořád hlásí jako vypnutá. Zavřete aplikaci úplně (přejeďte ji v přehledu
+                        otevřených aplikací nahoru) a otevřete ji znovu z plochy. Když ani to nepomůže, smažte ikonu
+                        z plochy, přidejte ji znovu podle kroku 1 a pak ťukněte na Povolit upozornění.
+                    </p>
+                </div>
 
                 <button type="button" class="btn btn-quiet btn-sm btn-block mt-3" x-show="subscribed" x-on:click="disable()" :disabled="busy">
                     Vypnout na tomto zařízení
