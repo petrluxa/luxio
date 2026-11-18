@@ -286,4 +286,25 @@ describe('návrat po odeslání formuláře', function () {
             ->assertRedirect("/admin/rezervace/{$booking->id}/presun")
             ->assertSessionHas('error');
     });
+
+    test('hlavičce Referer aplikace nevěří – Safari v ní posílá adresu service workeru', function () {
+        $this->travelTo(TEST_NOW);
+        [$salon, $petra] = salonWithStaff();
+        $booking = app(BookingManager::class)->create(customer($salon), [service($salon)], at('10:00'), $petra);
+
+        $this->actingAs($petra);
+        $this->get("/admin/rezervace/{$booking->id}")->assertOk();
+
+        // Uložení poznámky se vrací „zpět“: na detail rezervace, ne na adresu z hlavičky.
+        foreach ([url('/sw.js'), 'https://example.com/jinam'] as $referer) {
+            $this->post("/admin/rezervace/{$booking->id}/poznamka", ['staff_note' => 'x'], ['Referer' => $referer])
+                ->assertRedirect("/admin/rezervace/{$booking->id}");
+        }
+
+        // Totéž po chybě ve formuláři.
+        $this->get("/admin/zakaznice/{$booking->customer_id}")->assertOk();
+        $this->post("/admin/zakaznice/{$booking->customer_id}", ['name' => ''], ['Referer' => url('/sw.js')])
+            ->assertRedirect("/admin/zakaznice/{$booking->customer_id}")
+            ->assertSessionHasErrors('name');
+    });
 });

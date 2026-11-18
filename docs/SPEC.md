@@ -194,8 +194,9 @@ na telefonu je nabídka dole. Posouvá se vždy celá stránka, žádné vnitřn
    Den se šipkami, Dnes (u celého salonu i Zítra) a **ikona kalendáře** pro skok na libovolný den
    (třeba za měsíc) jsou **v horní liště** (místo názvu salonu). V panelu pod ní vlevo **měsíční kalendář** (skok na den, tečka = den s rezervacemi)
    a uprostřed **cedule salonu**: podsvícený nápis na stěně (vlastní nápis a podtitul z údajů salonu,
-   jinak název salonu), pod ní skupiny podle zaměření. Na telefonu je cedule jen nízký pruh
-   a štítky jsou v jednom řádku, aby byl rozvrh vidět hned. Pod tím mřížka:
+   jinak název salonu), pod ní skupiny podle zaměření. Na telefonu a v úzkém okně se cedule
+   neukazuje, štítky jsou v jednom řádku a měsíční kalendář rozbaluje tlačítko Kalendář v horní liště
+   (místo ikony pro výběr dne), aby byl rozvrh vidět hned. Pod tím mřížka:
    **sloupce = členové týmu** (jako kurty; pořadí určuje správce), řádky po půl hodině,
    v záhlaví jméno, zaměření a začátek a konec pracovní doby. Nad mřížkou **skupiny podle zaměření**
    (Celý salon, Kadeřnice, Manikúra…) a výběr jednoho člověka. **Blok rezervace** (jako v rozvrhu
@@ -204,8 +205,10 @@ na telefonu je nabídka dole. Posouvá se vždy celá stránka, žádné vnitřn
    (potvrzená neonová, čeká hnědá, proběhlá nebo zaplacená ztlumená) a značkou za časem (zaplaceno, čeká).
    Co se do úzkého bloku nevejde, mizí v pořadí: ikony, délka, telefon.
    Kliknutí na místo = nová rezervace (i mimo pracovní dobu), tlačítko + u jména = další zákaznice,
-   přetažení = přesun. **Sloupec má všude stejnou nejmenší šířku** (180 px, na telefonu 148 px = dva
-   sloupce): týden jedné kadeřnice i den celého salonu vypadají stejně. Co se do okna nevejde, posouvá
+   přetažení = přesun. **Sloupec má všude stejnou nejmenší šířku** (180 px): týden jedné kadeřnice i den
+   celého salonu vypadají stejně. Na telefonu má kadeřnice **den přes skoro celou obrazovku** (další dny
+   posouvá prstem, den doskočí na místo), den celého salonu ukazuje dva sloupce (148 px).
+   **Cedule salonu se na telefonu a v úzkém okně neukazuje** – rozvrh začíná hned pod lištou. Co se do okna nevejde, posouvá
    se do strany – šipkami v záhlaví, na telefonu prstem, při tažení rezervace k okraji samo; osa času
    zůstává na místě. Svisle se posouvá celá stránka a záhlaví sloupců se drží pod horní lištou.
    Sloupec může být i jiná služba než kadeřnice (např. modelace nehtů).

@@ -414,6 +414,23 @@ describe('dvě zákaznice najednou', function () {
             $b->id => ['lane' => 0, 'lanes' => 2],
         ]);
     });
+
+    test('úklid po zákaznici se nekreslí, takže další rezervaci nezužuje', function () {
+        // Střih 9:00–9:45 a po něm 15 minut úklidu; další zákaznice přijde v 9:50 (kadeřnice si ji tam zapsala sama).
+        $tidy = service($this->salon, ['name' => 'Střih s úklidem', 'buffer_after' => 15], $this->sabina);
+        $a = $this->manager->create($this->jana, [$tidy], at('09:00'), $this->sabina);
+        $b = $this->manager->create($this->eva, [$this->cut], at('09:50'), $this->sabina, allowOverlap: true);
+
+        expect(CalendarLanes::assign(Booking::with('segments')->orderBy('starts_at')->get()))->toBe([
+            $a->id => ['lane' => 0, 'lanes' => 1],
+            $b->id => ['lane' => 0, 'lanes' => 1],
+        ]);
+
+        // V rozvrhu jsou obě na plnou šířku sloupce.
+        $this->actingAs($this->sabina)->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()
+            ->assertSee('data-booking="'.$b->id.'"', false)
+            ->assertDontSee('* 1 / 2)', false);
+    });
 });
 
 describe('přetažení rezervace v rozvrhu', function () {

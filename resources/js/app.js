@@ -13,6 +13,20 @@ Alpine.data('pushSetup', pushSetup);
 // Světlá / tmavá verze: podle zařízení, dokud si ji uživatel nepřepne sám (pamatuje si to prohlížeč).
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
 
+// Rozvrh na telefonu: tlačítko Kalendář v horní liště rozbaluje měsíční kalendář pod ní.
+Alpine.store('schedule', {
+    calendar: false,
+
+    toggleCalendar() {
+        this.calendar = !this.calendar;
+
+        // Kalendář je nahoře na stránce – po rozbalení k němu vyjet, ať je vidět.
+        if (this.calendar) {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    },
+});
+
 Alpine.store('theme', {
     mode: null, // 'light' | 'dark' | null = podle zařízení
     dark: false,

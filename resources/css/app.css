@@ -739,6 +739,37 @@
     }
 
     /* Ikona kalendáře: přes ni leží průhledné pole s datem, takže ťuknutí otevře kalendář zařízení. */
+    /* Kalendář v liště: na telefonu a v úzkém okně tlačítko, které rozbalí měsíční kalendář;
+       v širokém okně (kalendář je vidět pořád) jen ikona pro skok na libovolný den. */
+    .top-day-cal {
+        flex: none;
+        gap: 6px;
+    }
+
+    @media (max-width: 429px) {
+        .top-day-cal {
+            width: 36px;
+            padding: 0;
+            justify-content: center;
+        }
+
+        .top-day-cal span {
+            display: none;
+        }
+    }
+
+    @media (min-width: 900px) {
+        .top-day .top-day-cal {
+            display: none;
+        }
+    }
+
+    @media (max-width: 899px) {
+        .top-day .top-day-pick {
+            display: none;
+        }
+    }
+
     .top-day-pick {
         position: relative;
         flex: none;
@@ -861,47 +892,6 @@
         letter-spacing: 0.46em;
         text-transform: uppercase;
         transition: color 0.9s ease;
-    }
-
-    /* Telefon: cedule jen jako nízký pruh a štítky v jednom řádku (posouvají se do strany),
-       aby byl rozvrh vidět hned pod nimi. */
-    @media (max-width: 639px) {
-        .sign {
-            gap: 6px;
-            min-height: 68px;
-            padding: 14px 12px 12px;
-        }
-
-        .sign-title {
-            font-size: clamp(16px, calc(62cqw / (var(--sign-chars, 8) * 0.95)), 32px);
-        }
-
-        .sign-sub {
-            font-size: 9px;
-        }
-
-        .sched-top {
-            gap: 10px;
-            padding: 10px;
-        }
-
-        .sched-top .sched-head .chips {
-            flex-wrap: nowrap;
-            justify-content: flex-start;
-            width: 100%;
-            overflow-x: auto;
-            padding-bottom: 2px;
-            scrollbar-width: none;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .sched-top .sched-head .chips::-webkit-scrollbar {
-            display: none;
-        }
-
-        .sched-top .sched-head .chips .chip {
-            flex: none;
-        }
     }
 
     /* Obsah: na telefonu místo dole pro spodní nabídku, na počítači ne */
@@ -1075,6 +1065,51 @@
         justify-content: center;
     }
 
+    /* Telefon a úzké okno: cedule salonu se neukazuje a panel nemá rámeček – zbydou jen štítky
+       v jednom řádku (posouvají se do strany), aby byl rozvrh vidět hned. Cedule patří k širokému
+       rozložení s měsíčním kalendářem vedle. */
+    @media (max-width: 899px) {
+        .sched-head .sign {
+            display: none;
+        }
+
+        .sched-top {
+            gap: 8px;
+            margin-bottom: 10px;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            background: none;
+        }
+
+        .sched-top .sched-head {
+            align-items: stretch;
+        }
+
+        /* Bez štítků a se sbaleným kalendářem po panelu nezbude ani mezera. */
+        .sched-top:not(:has(.chip)):not(:has(.mini-cal.is-open)) {
+            display: none;
+        }
+
+        .sched-top .sched-head .chips {
+            flex-wrap: nowrap;
+            justify-content: flex-start;
+            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 2px;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .sched-top .sched-head .chips::-webkit-scrollbar {
+            display: none;
+        }
+
+        .sched-top .sched-head .chips .chip {
+            flex: none;
+        }
+    }
+
     .sched-arrow {
         position: relative;
         flex: none;
@@ -1200,9 +1235,6 @@
             display: block;
         }
 
-        .mini-cal-toggle {
-            display: none;
-        }
 
         .mini-day {
             height: 32px;
@@ -1216,7 +1248,7 @@
        horní lištou a do strany ho s mřížkou posouvá skript. */
     .cal-frame {
         --cal-time: 52px;
-        --cal-min: 148px; /* telefon: dva sloupce vedle sebe */
+        --cal-min: 148px; /* telefon, den celého salonu: dva sloupce vedle sebe */
     }
 
     @media (min-width: 768px) {
@@ -1285,6 +1317,28 @@
         .cal-hours::before,
         .cal-corner::before {
             display: none;
+        }
+    }
+
+    /* Týden jedné kadeřnice na telefonu: den je přes skoro celou obrazovku, kousek dalšího dne vpravo
+       napovídá, že se dá posunout prstem. Po posunu den doskočí na místo hned za osu času. */
+    @media (max-width: 639px) {
+        .cal-week {
+            --cal-min: calc(100vw - 36px - var(--cal-time) - 44px);
+        }
+
+        .cal-scroll {
+            scroll-snap-type: x proximity;
+            scroll-padding-left: calc(18px + var(--cal-time));
+        }
+
+        .cal-week .cal-col {
+            scroll-snap-align: start;
+        }
+
+        /* Při tažení rezervace k okraji posouvá mřížku skript – doskakování by se s ním pralo. */
+        html.is-dragging-booking .cal-scroll {
+            scroll-snap-type: none;
         }
     }
 
@@ -1538,8 +1592,8 @@
     /* Rezervace. Vodorovnou polohu a šířku určuje šablona (pruhy při souběhu dvou zákaznic). */
     /* Blok: nahoře pruh s časem a vpravo telefon, pod ním příjmení, vpravo dole úkon. Co se do úzkého
        bloku nevejde, mizí podle jeho skutečné šířky (souběh dvou zákaznic, telefon).
-       Rezervace je plný barevný kus přes celou šířku sloupce: práce, působení barvy i dokončení na sebe
-       navazují bez mezer; zaoblený je jen začátek a konec. Barva říká stav. */
+       Rezervace je plný barevný kus od kraje do kraje sloupce a od linky začátku po linku konce: práce,
+       působení barvy i dokončení na sebe navazují bez mezer; zaoblený je jen začátek a konec. Barva říká stav. */
     .cal-block,
     .cal-pause {
         position: absolute;
@@ -1831,8 +1885,8 @@
     /* Obrys přetahované rezervace na novém místě */
     .cal-ghost {
         position: absolute;
-        right: 2px;
-        left: 2px;
+        right: 0;
+        left: 0;
         z-index: 5;
         overflow: hidden;
         padding: 2px 6px;
@@ -1869,12 +1923,25 @@
         color: var(--text);
     }
 
+    /* Teď: čára vede pod rezervacemi (nepřeškrtává jejich text), tečka na ose času je vidět vždy. */
     .cal-now {
         position: absolute;
         right: 0;
         left: 0;
-        z-index: 3;
+        z-index: 1;
         border-top: 2px solid var(--danger);
+        pointer-events: none;
+    }
+
+    .cal-now-dot {
+        position: absolute;
+        right: -5px;
+        z-index: 1;
+        width: 10px;
+        height: 10px;
+        margin-top: -4px;
+        border-radius: 50%;
+        background: var(--danger);
         pointer-events: none;
     }
 }

@@ -5,7 +5,7 @@
  * Aplikace může běžet i v podsložce webu (např. /luxio), proto se všechny cesty
  * počítají od adresy, na které tento soubor leží.
  */
-const VERSION = 'luxio-v2';
+const VERSION = 'luxio-v3';
 const META = 'luxio-meta';
 const ROOT = new URL('./', self.location.href);
 const inApp = (path) => new URL(String(path).replace(/^\/+/, ''), ROOT).href;
@@ -35,8 +35,10 @@ self.addEventListener('activate', (event) => {
 });
 
 // Otevření stránky: vždy ze sítě, při výpadku připojení offline stránka.
+// Odeslání formuláře (POST) se nechává prohlížeči beze změny – offline stránka pro něj nedává smysl
+// a požadavek znovu vyslaný odsud by v Safari nesl tento soubor jako „předchozí stránku“.
 self.addEventListener('fetch', (event) => {
-    if (event.request.mode !== 'navigate') {
+    if (event.request.mode !== 'navigate' || event.request.method !== 'GET') {
         return;
     }
 

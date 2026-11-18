@@ -10,6 +10,9 @@ use App\Models\Booking;
  *
  * Rezervace, jejichž práce se překrývá, dostanou každá svůj pruh vedle sebe. Rezervace, která se
  * vejde do pauzy jiné (působí barva), zůstává ve stejném pruhu – nic se nekryje, takže má plnou šířku.
+ *
+ * Rozhoduje jen to, co se v rozvrhu kreslí. Úklid po zákaznici se nekreslí, takže rezervace, do které
+ * zasahuje jen úklid té předchozí, zůstává pod ní na plnou šířku.
  */
 final class CalendarLanes
 {
@@ -26,6 +29,10 @@ final class CalendarLanes
             $end = $booking->ends_at->getTimestamp();
 
             foreach ($booking->segments as $segment) {
+                if ($segment->type === SegmentType::Buffer) {
+                    continue;
+                }
+
                 $end = max($end, $segment->ends_at->getTimestamp());
 
                 if ($segment->type !== SegmentType::Pause) {

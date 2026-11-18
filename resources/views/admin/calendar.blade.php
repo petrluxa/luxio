@@ -49,7 +49,12 @@
         @unless ($week)
             <a class="chip chip-sm top-day-extra @if ($date->equalTo($today->addDay())) is-on @endif" href="{{ $link(['datum' => $today->addDay()->toDateString()]) }}">Zítra</a>
         @endunless
-        {{-- Skok na libovolný den (třeba za měsíc): ikona otevře kalendář zařízení. --}}
+        {{-- Telefon a úzké okno: tlačítko rozbalí měsíční kalendář pod lištou (na širokém okně je vidět pořád). --}}
+        <button type="button" class="chip chip-sm top-day-cal" x-data x-on:click="$store.schedule.toggleCalendar()"
+                :aria-expanded="$store.schedule.calendar" aria-controls="mesicni-kalendar">
+            @include('partials.icon', ['name' => 'calendar', 'size' => 18])<span>Kalendář</span>
+        </button>
+        {{-- Široké okno: skok na libovolný den (třeba za měsíc), ikona otevře kalendář zařízení. --}}
         <label class="top-day-pick" x-data="{ go(value) { if (value) { window.location = @js($link(['datum' => '__DEN__'])).replace('__DEN__', value) } } }">
             @include('partials.icon', ['name' => 'calendar', 'size' => 20])
             <span class="sr-only">Vybrat den v kalendáři</span>
@@ -60,9 +65,9 @@
 @endsection
 
 @section('content')
-    <section class="sched-top" x-data="{ open: false }">
+    <section class="sched-top" x-data>
         {{-- Měsíční kalendář: skok na jiný den, tečka = den s rezervacemi --}}
-        <div class="mini-cal" :class="{ 'is-open': open }">
+        <div class="mini-cal" id="mesicni-kalendar" :class="{ 'is-open': $store.schedule.calendar }">
             <div class="mini-cal-head">
                 <a class="sched-arrow" href="{{ $link(['mesic' => $mini['prev']]) }}" aria-label="Předchozí měsíc">‹</a>
                 <b>{{ mb_convert_case(Cz::monthYear($mini['month']), MB_CASE_TITLE) }}</b>
@@ -114,7 +119,6 @@
                     <a class="chip chip-sm @if ($all) is-on @endif" href="{{ $link(['kadernice' => 'vse']) }}" @if ($all) aria-current="true" @endif>Celý salon</a>
                 @endif
 
-                <button type="button" class="chip chip-sm mini-cal-toggle" x-on:click="open = !open" :aria-expanded="open">Kalendář</button>
             </div>
         </div>
     </section>
@@ -179,6 +183,11 @@
                 @for ($minute = $dayStart; $minute < $dayEnd; $minute += 30)
                     <span class="cal-hour @if ($minute % 60) is-half @endif" style="top: {{ ($minute - $dayStart) * $hourHeight / 60 }}px">{{ sprintf('%02d:%02d', intdiv($minute, 60), $minute % 60) }}</span>
                 @endfor
+
+                {{-- Tečka „teď“ na ose času (čára ve sloupci dneška vede pod rezervacemi). --}}
+                @if ($now->hour >= $hourFrom && $now->hour < $hourTo && collect($columns)->contains(fn ($column) => $column['date']->equalTo($today)))
+                    <span class="cal-now-dot" style="top: {{ $y($now, $today) }}px" aria-hidden="true"></span>
+                @endif
             </div>
 
             @foreach ($columns as $column)
@@ -206,8 +215,9 @@
                         @php
                             $firstWork = true;
                             $place = $column['lanes'][$booking->id] ?? ['lane' => 0, 'lanes' => 1];
-                            $box = 'left: calc(2px + (100% - 4px) * '.$place['lane'].' / '.$place['lanes'].'); '
-                                .'width: calc((100% - 4px) / '.$place['lanes'].' - '.($place['lanes'] > 1 ? 2 : 0).'px);';
+                            // Blok sahá od kraje do kraje sloupce; jen mezi dvěma vedle sebe je tenká mezera.
+                            $box = 'left: calc(100% * '.$place['lane'].' / '.$place['lanes'].'); '
+                                .'width: calc(100% / '.$place['lanes'].' - '.($place['lanes'] > 1 && $place['lane'] < $place['lanes'] - 1 ? 1 : 0).'px);';
                             $pending = $booking->status === BookingStatus::Pending;
                             $done = ! $pending && ($booking->isPaid() || $booking->status === BookingStatus::Completed || $booking->ends_at->isPast());
                             $state = match (true) {
@@ -225,8 +235,8 @@
                         @foreach ($parts as $segment)
                             @php
                                 $top = $y($segment->starts_at, $day);
-                                // Pod koncem rezervace zůstává tenká mezera, aby se dvě po sobě nespojily v jednu.
-                                $segmentHeight = max(4, $y($segment->ends_at, $day) - $top - ($loop->last ? 2 : 0));
+                                // Blok končí přesně na lince svého konce; další rezervaci pod ním odliší její světlejší záhlaví.
+                                $segmentHeight = max(4, $y($segment->ends_at, $day) - $top);
                             @endphp
                             @if ($segment->type === SegmentType::Work)
                                 {{-- Nízký blok (do 40 min) má příjmení a úkon na jednom řádku, nejnižší (do 25 min) jen záhlaví s příjmením. --}}
