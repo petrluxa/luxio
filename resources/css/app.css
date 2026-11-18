@@ -735,6 +735,35 @@
         display: none;
     }
 
+    /* Ikona kalendáře: přes ni leží průhledné pole s datem, takže ťuknutí otevře kalendář zařízení. */
+    .top-day-pick {
+        position: relative;
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--link);
+        cursor: pointer;
+    }
+
+    .top-day-pick:hover {
+        border-color: var(--link);
+    }
+
+    .top-day-pick input {
+        position: absolute;
+        inset: -4px;
+        width: calc(100% + 8px);
+        height: calc(100% + 8px);
+        opacity: 0;
+        cursor: pointer;
+    }
+
     @media (min-width: 640px) {
         .top-day {
             gap: 8px;
@@ -831,10 +860,44 @@
         transition: color 0.9s ease;
     }
 
+    /* Telefon: cedule jen jako nízký pruh a štítky v jednom řádku (posouvají se do strany),
+       aby byl rozvrh vidět hned pod nimi. */
     @media (max-width: 639px) {
         .sign {
-            min-height: 104px;
-            padding: 22px 12px 18px;
+            gap: 6px;
+            min-height: 68px;
+            padding: 14px 12px 12px;
+        }
+
+        .sign-title {
+            font-size: clamp(16px, calc(62cqw / (var(--sign-chars, 8) * 0.95)), 32px);
+        }
+
+        .sign-sub {
+            font-size: 9px;
+        }
+
+        .sched-top {
+            gap: 10px;
+            padding: 10px;
+        }
+
+        .sched-top .sched-head .chips {
+            flex-wrap: nowrap;
+            justify-content: flex-start;
+            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 2px;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .sched-top .sched-head .chips::-webkit-scrollbar {
+            display: none;
+        }
+
+        .sched-top .sched-head .chips .chip {
+            flex: none;
         }
     }
 
@@ -1004,6 +1067,11 @@
     }
 
 
+    /* Štítky skupin pod cedulí: na počítači na středu, na telefonu v jednom řádku od kraje. */
+    .sched-head .chips {
+        justify-content: center;
+    }
+
     .sched-arrow {
         position: relative;
         flex: none;
@@ -1156,9 +1224,10 @@
         --cal-gutter: 18px;
     }
 
+    /* Jeden člověk rozložený do sedmi dnů: na telefonu jsou vidět první tři, další se posunou do strany. */
     .cal-week {
-        grid-template-columns: 48px repeat(7, minmax(84px, 1fr));
-        --cal-gutter: 1px;
+        grid-template-columns: 52px repeat(7, minmax(104px, 1fr));
+        --cal-gutter: 10px;
     }
 
     @media (min-width: 1024px) {
@@ -1470,17 +1539,6 @@
         opacity: 0.85;
         text-overflow: ellipsis;
         white-space: nowrap;
-    }
-
-    .cal-week .cal-block {
-        border-left-width: 3px;
-        border-radius: 6px;
-        font-size: 11px;
-    }
-
-    .cal-week .cal-block b {
-        font-size: 11px;
-        font-weight: 600;
     }
 
     /* Čeká na schválení */

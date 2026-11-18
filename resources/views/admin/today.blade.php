@@ -2,11 +2,11 @@
 @use('App\Enums\BookingStatus')
 @extends('layouts.admin')
 
-@section('title', 'Dnes')
+@section('title', 'Můj den')
 
 @section('content')
     <p class="label">{{ Cz::dateLong($today) }}</p>
-    <h1 class="screen-title">Dnes</h1>
+    <h1 class="screen-title">Můj den</h1>
 
     @include('admin.partials.staff-switch', ['route' => 'admin.today'])
 

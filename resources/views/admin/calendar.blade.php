@@ -7,23 +7,22 @@
 
 @php
     $week = $view === 'tyden';
-    $hourHeight = $week ? 52 : 68;                 // px na hodinu
+    $hourHeight = 68;                              // px na hodinu
     $half = $hourHeight / 2;                       // řádek mřížky = půl hodiny
     $dayStart = $hourFrom * 60;
     $dayEnd = $hourTo * 60;
     $height = ($hourTo - $hourFrom) * $hourHeight;
     // Poloha času na ose; co přesahuje zobrazené hodiny (rezervace přes půlnoc), se ořízne.
     $y = fn ($time, $day) => round((max($dayStart, min($dayEnd, $time->isSameDay($day) ? $time->hour * 60 + $time->minute : ($time < $day ? 0 : 1440))) - $dayStart) * $hourHeight / 60, 1);
-    // Odkazy v rozvrhu drží zvolené zobrazení a kadeřnici.
-    $keep = ['zobrazeni' => $week ? 'tyden' : null, 'kadernice' => $all ? null : $staff->id, 'obor' => $group];
+    // Odkazy v rozvrhu si nesou, koho rozvrh ukazuje (jeden člověk / celý salon) a skupinu.
+    $keep = ['kadernice' => $who, 'obor' => $group];
     $link = fn (array $change = []) => route('admin.calendar', array_filter($change + $keep + ['datum' => $date->toDateString()], fn ($value) => $value !== null));
     $now = now();
     $today = $now->startOfDay();
     $first = $columns[0]['date'];
-    $title = $week ? 'Týden' : mb_convert_case(Cz::weekdayName($date->dayOfWeekIso), MB_CASE_TITLE);
-    $subtitle = $week
-        ? $first->day.'. '.$first->month.'. – '.Cz::dateFull($first->addDays(6)).($staffList->count() > 1 ? ' · '.$staff->name : '')
-        : Cz::dateFull($date);
+    // Jeden člověk: jeho jméno a sedm dní od–do. Celý salon: den v týdnu a datum.
+    $title = $week ? $staff->name : mb_convert_case(Cz::weekdayName($date->dayOfWeekIso), MB_CASE_TITLE);
+    $subtitle = $week ? Cz::date($first).' – '.Cz::date($first->addDays(6)) : Cz::dateFull($date);
     // Začátek a konec pracovního dne kadeřnice (polední pauza je vidět v mřížce).
     $hoursLabel = fn (array $column) => match (true) {
         (bool) $column['holiday'] => 'svátek',
@@ -40,17 +39,23 @@
 {{-- Den se šipkami patří do horní lišty (místo názvu salonu – ten je na ceduli v panelu). --}}
 @section('top-left')
     <div class="top-day">
-        <a class="sched-arrow" href="{{ $link(['datum' => $back->toDateString()]) }}" aria-label="{{ $week ? 'Předchozí týden' : 'Předchozí den' }}">‹</a>
+        <a class="sched-arrow" href="{{ $link(['datum' => $back->toDateString()]) }}" aria-label="{{ $week ? 'O týden zpět' : 'Předchozí den' }}">‹</a>
         <div class="top-day-title">
             <h1>{{ $title }}</h1>
             <span>{{ $subtitle }}</span>
         </div>
-        <a class="sched-arrow" href="{{ $link(['datum' => $step->toDateString()]) }}" aria-label="{{ $week ? 'Další týden' : 'Další den' }}">›</a>
+        <a class="sched-arrow" href="{{ $link(['datum' => $step->toDateString()]) }}" aria-label="{{ $week ? 'O týden dál' : 'Další den' }}">›</a>
         <a class="chip chip-sm @if ($date->equalTo($today)) is-on @endif" href="{{ $link(['datum' => $today->toDateString()]) }}">Dnes</a>
-        <a class="chip chip-sm top-day-extra @if ($date->equalTo($today->addDay())) is-on @endif" href="{{ $link(['datum' => $today->addDay()->toDateString()]) }}">Zítra</a>
-        {{-- Týden jednoho člověka; druhé ťuknutí vrací den. --}}
-        <a class="chip chip-sm @if ($week) is-on @endif" href="{{ $week ? $link(['zobrazeni' => null]) : $link(['zobrazeni' => 'tyden', 'kadernice' => $staff->id]) }}"
-           @if ($week) aria-current="true" @endif>Týden</a>
+        @unless ($week)
+            <a class="chip chip-sm top-day-extra @if ($date->equalTo($today->addDay())) is-on @endif" href="{{ $link(['datum' => $today->addDay()->toDateString()]) }}">Zítra</a>
+        @endunless
+        {{-- Skok na libovolný den (třeba za měsíc): ikona otevře kalendář zařízení. --}}
+        <label class="top-day-pick" x-data="{ go(value) { if (value) { window.location = @js($link(['datum' => '__DEN__'])).replace('__DEN__', value) } } }">
+            @include('partials.icon', ['name' => 'calendar', 'size' => 20])
+            <span class="sr-only">Vybrat den v kalendáři</span>
+            <input type="date" value="{{ $date->toDateString() }}" aria-label="Vybrat den v kalendáři"
+                   x-on:click="$el.showPicker && $el.showPicker()" x-on:change="go($el.value)">
+        </label>
     </div>
 @endsection
 
@@ -88,21 +93,25 @@
                 @if ($salon->sign_subtitle)<span class="sign-sub">{{ $salon->sign_subtitle }}</span>@endif
             </div>
 
-            <div class="chips justify-center" role="group" aria-label="Skupina">
+            <div class="chips" role="group" aria-label="Skupina">
+                {{-- Na začátku to, co se týká přihlášeného: vybraný člověk (ťuknutím se vrátí celý salon nebo
+                     skupina) a cesta zpět ke svým sedmi dnům. --}}
+                @if (! $all && $staffList->count() > 1)
+                    <a class="chip chip-sm is-on" href="{{ $link(['kadernice' => $group ? null : 'vse']) }}" aria-label="{{ $staff->name }} – zpět na {{ $group ? 'skupinu' : 'celý salon' }}">{{ $staff->name }} ×</a>
+                @endif
+                @if ($me->is_bookable && ($all || ! $staff->is($me)))
+                    <a class="chip chip-sm" href="{{ $link(['kadernice' => $me->id, 'obor' => null]) }}">Můj rozvrh</a>
+                @endif
+
                 {{-- Skupiny podle zaměření: kadeřnice, manikúra, pedikúra, kosmetika… --}}
                 @if ($groups->isNotEmpty())
-                    <a class="chip chip-sm @if (! $group && $all) is-on @endif" href="{{ $link(['obor' => null, 'kadernice' => null, 'zobrazeni' => null]) }}" @if (! $group && $all) aria-current="true" @endif>Celý salon</a>
+                    <a class="chip chip-sm @if (! $group && $all) is-on @endif" href="{{ $link(['obor' => null, 'kadernice' => 'vse']) }}" @if (! $group && $all) aria-current="true" @endif>Celý salon</a>
                     @foreach ($groups as $key => $label)
-                        <a class="chip chip-sm @if ($group === $key && $all) is-on @endif" href="{{ $link(['obor' => $key, 'kadernice' => null, 'zobrazeni' => null]) }}"
+                        <a class="chip chip-sm @if ($group === $key && $all) is-on @endif" href="{{ $link(['obor' => $key, 'kadernice' => null]) }}"
                            @if ($group === $key && $all) aria-current="true" @endif>{{ mb_convert_case(mb_substr($label, 0, 1), MB_CASE_UPPER).mb_substr($label, 1) }}</a>
                     @endforeach
                 @elseif ($staffList->count() > 1)
-                    <a class="chip chip-sm @if ($all) is-on @endif" href="{{ $link(['kadernice' => null, 'zobrazeni' => null]) }}" @if ($all) aria-current="true" @endif>Celý salon</a>
-                @endif
-
-                {{-- Vybraný jeden člověk (kliknutím na jméno ve sloupci): ťuknutím se výběr zruší. --}}
-                @if (! $all && $staffList->count() > 1)
-                    <a class="chip chip-sm is-on" href="{{ $link(['kadernice' => null, 'zobrazeni' => null]) }}" aria-label="{{ $staff->name }} – zrušit výběr">{{ $staff->name }} ×</a>
+                    <a class="chip chip-sm @if ($all) is-on @endif" href="{{ $link(['kadernice' => 'vse']) }}" @if ($all) aria-current="true" @endif>Celý salon</a>
                 @endif
 
                 <button type="button" class="chip chip-sm mini-cal-toggle" x-on:click="open = !open" :aria-expanded="open">Kalendář</button>
@@ -114,7 +123,7 @@
         <div class="banner mb-3">Státní svátek: {{ $holiday }} – zavřeno</div>
     @endif
 
-    {{-- Mřížka: sloupce = kadeřnice (v týdnu dny), řádky po půl hodině. Rezervace jdou přetáhnout. --}}
+    {{-- Mřížka: sloupce = lidé z týmu (u jednoho člověka jeho sedm dní), řádky po půl hodině. Rezervace jdou přetáhnout. --}}
     <div class="cal-scroll"
          x-data="calendarBoard(@js([
              'dayStart' => $dayStart,
@@ -124,18 +133,20 @@
              'moveUrl' => route('admin.bookings.drop', ['booking' => '__ID__']),
          ]))">
         <div class="cal @if ($week) cal-week @elseif (count($columns) >= 8) cal-dense @endif" style="--cal-cols: {{ count($columns) }}; --cal-half: {{ $half }}px" x-ref="board">
-            {{-- Záhlaví sloupců: v týdnu dny, ve dni kadeřnice s pracovní dobou --}}
+            {{-- Záhlaví sloupců: u jednoho člověka dny, jinak lidé s pracovní dobou --}}
             <div class="cal-corner">Čas</div>
             @foreach ($columns as $column)
                 @if ($week)
-                    <a class="cal-head @if ($column['date']->equalTo($today)) is-today @endif" href="{{ route('admin.calendar', ['kadernice' => $staff->id, 'datum' => $column['date']->toDateString()]) }}">
-                        <b>{{ mb_convert_case(Cz::dayShort($column['date']), MB_CASE_TITLE) }} {{ $column['date']->day }}.</b>
+                    {{-- Den vede na rozvrh celého salonu v ten den. --}}
+                    <a class="cal-head @if ($column['date']->equalTo($today)) is-today @endif" href="{{ route('admin.calendar', ['kadernice' => 'vse', 'datum' => $column['date']->toDateString()]) }}"
+                       aria-label="{{ Cz::dateLong($column['date']) }} – celý salon">
+                        <b>{{ $column['date']->equalTo($today) ? 'Dnes' : mb_convert_case(Cz::dayShort($column['date']), MB_CASE_TITLE) }} {{ $column['date']->day }}. {{ $column['date']->month }}.</b>
                         <span>{{ $hoursLabel($column) }}</span>
                     </a>
                 @else
                     <div class="cal-staff">
                         <span class="cal-staff-dot" style="background: {{ $column['staff']->color }}" aria-hidden="true"></span>
-                        {{-- Jméno vede na rozvrh jen tohoto člověka (den, odtud i týden). --}}
+                        {{-- Jméno vede na rozvrh jen tohoto člověka (jeho sedm dní). --}}
                         <a class="cal-staff-name" href="{{ $link(['kadernice' => $column['staff']->id]) }}" aria-label="{{ $column['staff']->name }} – jen její rozvrh">
                             <b>{{ $column['staff']->name }}</b>
                             <span>{{ $headLabel($column) }}</span>
@@ -199,10 +210,7 @@
                                    data-duration="{{ $booking->durationMinutes() }}" data-name="{{ $booking->customer->name }}"
                                    @if ($booking->status->isActive()) data-draggable draggable="false" @endif
                                    aria-label="{{ Cz::time($booking->starts_at) }} {{ $booking->customer->name }}, {{ $booking->servicesLabel() }}">
-                                    @if ($week)
-                                        <span class="cal-block-head"><span>{{ Cz::time($segment->starts_at) }}</span></span>
-                                        <b>{{ $booking->customer->name }}</b>
-                                    @elseif ($firstWork)
+                                    @if ($firstWork)
                                         <span class="cal-block-head">
                                             <span>{{ Cz::time($booking->starts_at) }} ({{ $short($booking->durationMinutes()) }})</span>
                                             @if ($state)<i>{{ $state }}</i>@endif
@@ -217,7 +225,7 @@
                                 @php $firstWork = false; @endphp
                             @elseif ($segment->type === SegmentType::Pause)
                                 <div class="cal-pause" style="top: {{ $top }}px; height: {{ $segmentHeight }}px; {{ $box }}">
-                                    @if (! $week)<span>působí barva · {{ $booking->customer->name }}</span>@endif
+                                    <span>působí barva · {{ $booking->customer->name }}</span>
                                 </div>
                             @else
                                 <div class="cal-buffer" style="top: {{ $top }}px; height: {{ $segmentHeight }}px; {{ $box }}" title="Úklid"></div>
@@ -249,7 +257,8 @@
     </div>
 
     <p class="label mt-3">
-        Rezervaci přetáhnete myší na jiný čas nebo k jiné kadeřnici (na telefonu ji nejdřív chvíli podržte).
+        Rezervaci přetáhnete myší na jiný čas{{ $week ? ' nebo den' : ' nebo k jiné kadeřnici' }} (na telefonu ji nejdřív chvíli podržte).
+        @if ($week)Další dny na telefonu posunete prstem do strany, šipky nahoře posouvají o týden.@endif
         Kliknutím na volné místo vytvoříte novou, kliknutím na rezervaci otevřete detail a vyúčtování.
         @if (! $week)Další zákaznici na stejný čas přidáte tlačítkem + u jména kadeřnice.@endif
     </p>

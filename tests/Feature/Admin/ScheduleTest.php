@@ -47,23 +47,63 @@ describe('rozvrh dne', function () {
             ->assertSee('Jana Nováková')
             ->assertSee('603 123 456')
             // Den se šipkami v horní liště, název salonu na ceduli a měsíční kalendář vedle rozvrhu.
-            ->assertSeeInOrder(['top-day', 'Středa', App\Support\Cz::dateFull(at('00:00')), 'Dnes', 'Zítra', 'Týden'], false)
+            ->assertSeeInOrder(['top-day', 'Středa', App\Support\Cz::dateFull(at('00:00')), 'Dnes', 'Zítra', 'Vybrat den v kalendáři'], false)
             ->assertSee('class="sign-title">'.e($this->salon->name), false)
             // Na ceduli není vypínač – vzhled se přepíná tlačítkem v liště.
             ->assertDontSee('sign-switch', false)
             ->assertSee('Přepnout na tmavou verzi', false)
             ->assertSee('Listopad 2026')
-            // Osobní přehled „Dnes“ správce bez zákaznic v nabídce nemá.
-            ->assertDontSee('<span>Dnes</span>', false);
+            // Osobní přehled „Můj den“ správce bez vlastního sloupce v nabídce nemá.
+            ->assertDontSee('<span>Můj den</span>', false)
+            ->assertDontSee('Můj rozvrh');
     });
 
-    test('kadeřnice má svůj přehled „Dnes“ a v rozvrhu vidí i kolegyni', function () {
+    test('kadeřnice po přihlášení vidí svých sedm dní, první sloupec je dnešek', function () {
+        $this->travelTo(TEST_DAY.' 07:00:00');   // středa 11. 11.
+        $today = $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->sabina);
+        $later = $this->manager->create($this->eva, [$this->cut], at('09:00', '2026-11-16'), $this->sabina);   // pondělí za 5 dní
+        $this->manager->create(customer($this->salon, ['name' => 'Cizí Zákaznice']), [$this->cut], at('10:00'), $this->sarka);
+
+        $this->post('/admin/login', ['login' => 'sabina', 'password' => 'password'])->assertRedirect('/admin');
+        $this->get('/admin')->assertRedirect('/admin/kalendar');
+
+        $this->get('/admin/kalendar')->assertOk()
+            ->assertSee('--cal-cols: 7', false)
+            // V liště její jméno a rozsah sedmi dnů, v záhlaví sloupců dny od dneška.
+            ->assertSeeInOrder(['top-day', 'Sabina', 'st 11.', 'út 17.'], false)
+            ->assertSeeInOrder(['Dnes 11. 11.', 'Čt 12. 11.', 'Pá 13. 11.', 'So 14. 11.', 'Ne 15. 11.', 'Po 16. 11.', 'Út 17. 11.'])
+            ->assertSee('data-booking="'.$today->id.'"', false)
+            ->assertSee('data-booking="'.$later->id.'"', false)
+            ->assertSee('Jana Nováková')
+            // Sobota a neděle bez pracovní doby, úterý 17. 11. je svátek.
+            ->assertSeeInOrder(['So 14. 11.', 'volno', 'Út 17. 11.', 'svátek'])
+            // Zákaznice kolegyně v jejím rozvrhu nejsou.
+            ->assertDontSee('Cizí Zákaznice')
+            ->assertSee('<span>Můj den</span>', false)
+            ->assertDontSee('Zítra');
+
+        // Šipka posouvá o týden, ikona kalendáře a měsíční kalendář skočí na libovolný den.
+        $this->get('/admin/kalendar?datum=2026-12-16')->assertOk()
+            ->assertSee('--cal-cols: 7', false)
+            ->assertSeeInOrder(['St 16. 12.', 'Čt 17. 12.', 'Út 22. 12.'])
+            ->assertSee('datum=2026-12-23', false)
+            ->assertSee('datum=2026-12-09', false)
+            ->assertSee('type="date"', false);
+    });
+
+    test('kadeřnice se přepne na celý salon a zpět na svůj rozvrh', function () {
         $this->actingAs($this->sabina);
 
-        $this->get('/admin')->assertOk()->assertSee('<span>Dnes</span>', false);
-        $this->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()->assertSee('--cal-cols: 2', false)->assertSee('Šárka');
-        $this->get("/admin/kalendar?kadernice={$this->sabina->id}&datum=".TEST_DAY)->assertOk()->assertSee('--cal-cols: 1', false);
-        $this->get("/admin/kalendar?kadernice={$this->sarka->id}&zobrazeni=tyden&datum=".TEST_DAY)->assertOk();
+        $this->get('/admin/kalendar?kadernice=vse&datum='.TEST_DAY)->assertOk()
+            ->assertSee('--cal-cols: 2', false)->assertSee('Šárka')
+            ->assertSee('Můj rozvrh')
+            // Odkazy si „celý salon“ nesou dál, jinak by ji další den vrátil k jejímu týdnu.
+            ->assertSee('kadernice=vse', false);
+
+        $this->get("/admin/kalendar?kadernice={$this->sarka->id}&datum=".TEST_DAY)->assertOk()
+            ->assertSee('--cal-cols: 7', false)->assertSee('Šárka ×')->assertSee('Můj rozvrh');
+
+        $this->get('/admin/dnes')->assertOk()->assertSee('Můj den');
     });
 
     test('den, kdy kadeřnice nepracuje, má v záhlaví „volno“ a svátek „svátek“', function () {
@@ -125,12 +165,12 @@ describe('tým s různým zaměřením', function () {
             ->assertSee('Nikola')->assertSee('Monika')
             ->assertDontSee('Jana Nováková');
 
-        // Skupina s jedním člověkem je rovnou jeho den; neznámá skupina = celý salon.
+        // Skupina s jedním člověkem je rovnou jeho sedm dní; neznámá skupina = celý salon.
         $this->get('/admin/kalendar?obor='.urlencode('pedikúra').'&datum='.TEST_DAY)->assertOk()
-            ->assertSee('--cal-cols: 1', false)->assertSee('Jana Nováková');
+            ->assertSee('--cal-cols: 7', false)->assertSee('Jana Nováková');
         $this->get('/admin/kalendar?obor=neexistuje&datum='.TEST_DAY)->assertOk()->assertSee('--cal-cols: 5', false);
 
-        // Týden jednoho člověka ze skupiny.
+        // Sedm dní jednoho člověka ze skupiny.
         $this->get('/admin/kalendar?obor='.urlencode('manikúra')."&kadernice={$this->monika->id}&zobrazeni=tyden&datum=".TEST_DAY)
             ->assertOk()->assertSee('Monika');
     });
@@ -214,11 +254,11 @@ describe('cedule salonu a vzhled', function () {
             ->assertSee('kadernice='.$this->sarka->id, false);
 
         $this->get("/admin/kalendar?kadernice={$this->sarka->id}&datum=".TEST_DAY)->assertOk()
-            ->assertSee('--cal-cols: 1', false)
+            ->assertSee('--cal-cols: 7', false)
             ->assertSee('Šárka ×');
 
         $this->get("/admin/kalendar?kadernice={$this->sarka->id}&zobrazeni=tyden&datum=".TEST_DAY)->assertOk()
-            ->assertSeeInOrder(['top-day', 'Týden', '9. 11. – 15.'], false);
+            ->assertSeeInOrder(['top-day', 'Šárka', 'st 11.', 'út 17.'], false);
     });
 
     test('světlá a tmavá verze jdou přepnout ručně – stránka si volbu načte hned', function () {
@@ -342,7 +382,7 @@ describe('přetažení rezervace v rozvrhu', function () {
         Event::assertDispatched(BookingMoved::class);
 
         // Rozvrh po načtení ukáže, co se stalo, a rezervace jde táhnout znovu.
-        $this->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()
+        $this->get('/admin/kalendar?kadernice=vse&datum='.TEST_DAY)->assertOk()
             ->assertSee('Jana Nováková: st 11.')
             ->assertSee('data-draggable', false)
             ->assertSee('data-booking="'.$booking->id.'"', false);
@@ -389,7 +429,7 @@ describe('přetažení rezervace v rozvrhu', function () {
         $drop([])->assertStatus(422);
 
         expect($booking->fresh()->staff_id)->toBe($this->sabina->id);
-        $this->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()->assertDontSee('data-draggable', false);
+        $this->get('/admin/kalendar?kadernice=vse&datum='.TEST_DAY)->assertOk()->assertDontSee('data-draggable', false);
     });
 
     test('bez přihlášení přetažení nejde', function () {

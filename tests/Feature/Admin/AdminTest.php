@@ -83,7 +83,7 @@ test('všechny obrazovky administrace se vykreslí', function (string $path) {
 
     $this->actingAs($this->petra)->get($path)->assertOk();
 })->with([
-    '/admin',
+    '/admin/dnes',
     '/admin/kalendar',
     '/admin/kalendar?zobrazeni=tyden&datum='.TEST_DAY,
     '/admin/kalendar?datum='.TEST_DAY,
@@ -120,7 +120,7 @@ test('dnes ukazuje další zákaznici a rychlé akce', function () {
     $this->travelTo(TEST_DAY.' 07:30:00');
     bookingAt($this, '10:00');
 
-    $this->actingAs($this->petra)->get('/admin')
+    $this->actingAs($this->petra)->get('/admin/dnes')
         ->assertOk()
         ->assertSee('Další zákaznice')
         ->assertSee('Jana Nováková')
@@ -635,7 +635,7 @@ describe('nastavení', function () {
         expect($sabina->login)->toBeNull()->and($sabina->password)->toBeNull()->and($sabina->canLogIn())->toBeFalse();
 
         $this->get('/admin/kadernice')->assertOk()->assertSee('Sabina')->assertSee('bez vlastního přihlášení');
-        $this->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()->assertSee('Sabina');
+        $this->get('/admin/kalendar?kadernice=vse&datum='.TEST_DAY)->assertOk()->assertSee('Sabina');
     });
 
     test('přihlašovací jméno chce heslo, musí být jedinečné a bez háčků', function () {

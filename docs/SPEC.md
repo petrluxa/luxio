@@ -176,13 +176,18 @@ Rozložení jako u rozvrhu sportovišť (rozhodnutí z 16. 11. 2026): nahoře li
 salonu** a na počítači hlavní nabídkou (Rozvrh, Schválit, Zákaznice, **Admin**, jméno přihlášeného);
 na telefonu je nabídka dole. Posouvá se vždy celá stránka, žádné vnitřní posuvníky.
 
-1. **Dnes** – osobní přehled kadeřnice: časová osa dne, další zákaznice nahoře, rychlé akce
-   (zavolat, poznámka, nepřišla). Správce bez vlastních zákaznic ho nemá.
-2. **Rozvrh** – den se šipkami, Dnes / Zítra a přepínač Týden jsou **v horní liště** (místo názvu
-   salonu). V panelu pod ní vlevo **měsíční kalendář** (skok na den, tečka = den s rezervacemi)
+1. **Můj den** – osobní seznam dnešních zákaznic kadeřnice: další zákaznice nahoře, rychlé akce
+   (zavolat, poznámka, nepřišla). Správce bez vlastního sloupce ho nemá. Není to úvodní obrazovka.
+2. **Rozvrh** – po přihlášení se otevírá rovnou rozvrh. **Kadeřnice (kdo má vlastní sloupec) vidí
+   svých sedm dní**: její „kurt“ rozložený do sedmi sloupců, první je vždy zvolený den (výchozí dnešek),
+   šipky posouvají o týden, na telefonu se další dny posouvají prstem do strany. Stejně se zobrazí
+   kdokoliv po kliknutí na jeho jméno. Správce bez vlastního sloupce vidí **den celého salonu** se sloupcem
+   pro každého; kadeřnice se na něj přepne štítkem „Celý salon“ a zpět štítkem „Můj rozvrh“.
+   Den se šipkami, Dnes (u celého salonu i Zítra) a **ikona kalendáře** pro skok na libovolný den
+   (třeba za měsíc) jsou **v horní liště** (místo názvu salonu). V panelu pod ní vlevo **měsíční kalendář** (skok na den, tečka = den s rezervacemi)
    a uprostřed **cedule salonu**: podsvícený nápis na stěně (vlastní nápis a podtitul z údajů salonu,
-   jinak název salonu), pod ní skupiny podle zaměření. Jeden člověk se vybírá
-   kliknutím na jeho jméno v záhlaví sloupce; výběr se ruší štítkem se jménem. Pod tím mřížka:
+   jinak název salonu), pod ní skupiny podle zaměření. Na telefonu je cedule jen nízký pruh
+   a štítky jsou v jednom řádku, aby byl rozvrh vidět hned. Pod tím mřížka:
    **sloupce = členové týmu** (jako kurty; pořadí určuje správce), řádky po půl hodině,
    v záhlaví jméno, zaměření a začátek a konec pracovní doby. Nad mřížkou **skupiny podle zaměření**
    (Celý salon, Kadeřnice, Manikúra…) a výběr jednoho člověka; od osmi sloupců je záhlaví zhuštěné. Rezervace ukazuje čas a délku, jméno, telefon

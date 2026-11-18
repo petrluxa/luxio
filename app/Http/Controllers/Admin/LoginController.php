@@ -53,7 +53,7 @@ class LoginController extends Controller
         RateLimiter::clear($key);
         $request->session()->regenerate();
 
-        return redirect()->intended(route('admin.today'));
+        return redirect()->intended(route('admin.home'));
     }
 
     public function destroy(Request $request): RedirectResponse

@@ -12,7 +12,9 @@ use Illuminate\Support\Facades\Route;
 
 // Načítá se z routes/web.php uvnitř skupiny /admin (přihlášený správce nebo kadeřnice).
 
-Route::get('/', TodayController::class)->name('today');
+// Po přihlášení rovnou rozvrh: kadeřnice svých sedm dní, správce bez sloupce celý salon.
+Route::get('/', fn () => redirect()->route('admin.calendar'))->name('home');
+Route::get('/dnes', TodayController::class)->name('today');
 Route::get('/kalendar', CalendarController::class)->name('calendar');
 Route::get('/ke-schvaleni', [BookingController::class, 'pending'])->name('pending');
 

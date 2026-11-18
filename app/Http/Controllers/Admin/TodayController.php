@@ -11,7 +11,8 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * Dnes: osobní přehled kadeřnice – další zákaznice nahoře, pod ní časová osa dne s rychlými akcemi.
+ * Můj den: osobní seznam dnešních zákaznic – další zákaznice nahoře, pod ní časová osa dne
+ * s rychlými akcemi. Po přihlášení se ale otevírá rozvrh (sedm dní kadeřnice).
  */
 class TodayController extends AdminController
 {

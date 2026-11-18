@@ -14,10 +14,10 @@
             'wide' => 'max-w-5xl',
             default => 'max-w-2xl',
         };
-        // „Dnes“ je osobní přehled kadeřnice; správce bez vlastních zákaznic ho nemá.
+        // „Můj den“ je osobní seznam dnešních zákaznic; správce bez vlastního sloupce ho nemá.
         $nav = array_filter([
-            'today' => $me->is_bookable ? ['admin.today', 'Dnes'] : null,
             'calendar' => ['admin.calendar', 'Rozvrh'],
+            'today' => $me->is_bookable ? ['admin.today', 'Můj den'] : null,
             'pending' => ['admin.pending', 'Schválit'],
             'customers' => ['admin.customers.index', 'Zákaznice'],
             'more' => ['admin.more', 'Admin'],

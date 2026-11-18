@@ -16,8 +16,9 @@ use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 /**
- * Rozvrh: den se sloupcem pro každou kadeřnici (přehled pro správce, recepci i kadeřnice),
- * den jedné kadeřnice, nebo její týden. Vlevo měsíční kalendář pro skok na jiný den.
+ * Rozvrh: den se sloupcem pro každého z týmu (celý salon nebo skupina), nebo jeden člověk
+ * rozložený do sedmi dnů od zvoleného dne – tak ho po přihlášení vidí kadeřnice.
+ * Vlevo měsíční kalendář pro skok na jiný den.
  * Ťuknutí na volné místo vede na novou rezervaci v daném čase, ťuknutí na rezervaci
  * na její detail; rezervaci jde myší nebo prstem přetáhnout na jiný čas či ke kolegyni.
  */
@@ -29,8 +30,8 @@ class CalendarController extends AdminController
 
     public function __invoke(Request $request, HolidayCalendar $holidays): View
     {
+        $me = $this->user();
         $staffList = $this->staffList();
-        $view = $request->query('zobrazeni') === 'tyden' ? 'tyden' : 'den';
         $date = $this->date($request->query('datum'));
 
         // Skupiny podle zaměření (kadeřnice, manikúra, pedikúra…) – jako seskupení kurtů.
@@ -42,14 +43,28 @@ class CalendarController extends AdminController
         $group = $groups->has(mb_strtolower((string) $request->query('obor'))) ? mb_strtolower((string) $request->query('obor')) : null;
         $pool = $group ? $staffList->filter(fn (User $u) => $u->positionKey() === $group)->values() : $staffList;
 
-        // Den ukazuje celou skupinu (nebo všechny) vedle sebe, dokud si přihlášený nevybere jednoho.
-        // Týden je vždy jednoho člověka.
-        $picked = $pool->firstWhere('id', $request->integer('kadernice'));
-        $staff = $picked ?? ($group ? $pool->first() : $this->currentStaff($request));
-        $all = $view === 'den' && ! $picked && $pool->count() > 1;
+        // Koho rozvrh ukazuje: číslo v adrese = jeden člověk, „vse“ = celý salon (nebo skupina).
+        // Bez výběru vidí ten, kdo má vlastní sloupec (kadeřnice po přihlášení), rovnou sebe;
+        // správce bez sloupce celý salon. Skupina s jediným člověkem je rovnou jeho rozvrh.
+        $who = (string) $request->query('kadernice');
+        $picked = ctype_digit($who) ? $pool->firstWhere('id', (int) $who) : null;
 
-        $from = $view === 'tyden' ? $date->startOfWeek() : $date;
-        $to = $view === 'tyden' ? $from->addDays(6) : $date;
+        if (! $picked && $who !== 'vse' && ! $group) {
+            $picked = $pool->firstWhere('id', $me->id);
+        }
+
+        if (! $picked && $pool->count() <= 1) {
+            $picked = $pool->first() ?? $this->currentStaff($request);
+        }
+
+        // Jeden člověk = jeho „kurt“ rozložený do sedmi dnů, první sloupec je zvolený den (výchozí dnešek).
+        // Víc lidí = jeden den se sloupcem pro každého.
+        $view = $picked ? 'tyden' : 'den';
+        $staff = $picked ?? $pool->first();
+        $all = $picked === null;
+
+        $from = $date;
+        $to = $view === 'tyden' ? $date->addDays(6) : $date;
         $members = $all ? $pool : new EloquentCollection([$staff]);
 
         $bookings = Booking::query()
@@ -99,6 +114,10 @@ class CalendarController extends AdminController
             'hourTo' => $hourTo,
             'step' => $view === 'tyden' ? $date->addWeek() : $date->addDay(),
             'back' => $view === 'tyden' ? $date->subWeek() : $date->subDay(),
+            // Co si odkazy v rozvrhu nesou dál: vybraného člověka, nebo výslovně „celý salon“
+            // (bez toho by se kadeřnici po každém kliknutí vrátil její týden).
+            'who' => $picked ? (string) $picked->id : ($me->is_bookable && ! $group ? 'vse' : null),
+            'me' => $me,
             'mini' => $this->miniCalendar($request, $date, $members->modelKeys()),
             'slotStep' => $this->salon()->rules()->slotStep,
         ]);

@@ -25,7 +25,7 @@ class PwaController extends Controller
 
     public function adminManifest(): JsonResponse
     {
-        return $this->manifest(config('app.name').' – salon', route('admin.today'));
+        return $this->manifest(config('app.name').' – salon', route('admin.home'));
     }
 
     public function offline(): View
