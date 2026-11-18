@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\UserRole;
+use App\Models\Customer;
 use App\Models\User;
 use App\Services\Setup\SalonInstaller;
 use App\Support\Cz;
@@ -32,7 +33,7 @@ class SettingsController extends AdminController
                 'staff' => $salon->staff()->count(),
                 'services' => $salon->services()->where('is_active', true)->count(),
                 'products' => $salon->products()->where('is_active', true)->count(),
-                'customers' => $salon->customers()->count(),
+                'customers' => Customer::query()->visibleTo($this->user())->count(),
             ],
         ]);
     }

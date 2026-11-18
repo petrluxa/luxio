@@ -16,6 +16,8 @@ const HOLD_MS = 350; // podržení prstem, než se rezervace „zvedne“
 const MOUSE_SLOP = 6; // o kolik px se musí myš pohnout, aby šlo o tažení a ne o klik
 const TOUCH_SLOP = 10; // pohyb prstu během podržení = posouvání stránky, ne tažení
 const EDGE = 70; // pruh u horního a dolního okraje okna, ve kterém se při tažení stránka sama posouvá
+const EDGE_X = 56; // pruh u levého a pravého okraje mřížky, ve kterém se při tažení mřížka sama posouvá do strany
+const PAN_KEY = 'luxio-rozvrh-posun'; // kam byl rozvrh posunutý do strany (aby se po uložení přesunu nevrátil na začátek)
 
 const format = (minutes) => `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`;
 
@@ -28,8 +30,31 @@ export default (config) => ({
     ghost: null,
     suppressClick: false,
 
+    pan: { left: false, right: false }, // je kam posunout rozvrh doleva / doprava?
+
     init() {
         const board = this.$refs.board;
+        const scroll = this.$refs.scroll;
+
+        // Záhlaví sloupců je mimo posuvný rámec (aby se drželo pod horní lištou) – do strany jede s mřížkou.
+        const sync = () => {
+            this.$refs.headbar.scrollLeft = scroll.scrollLeft;
+            this.pan.left = scroll.scrollLeft > 2;
+            this.pan.right = scroll.scrollLeft < scroll.scrollWidth - scroll.clientWidth - 2;
+        };
+
+        scroll.addEventListener(
+            'scroll',
+            () => {
+                sync();
+                this.remember();
+            },
+            { passive: true },
+        );
+        window.addEventListener('resize', sync);
+
+        this.restore();
+        sync();
 
         board.addEventListener('pointerdown', (event) => this.pointerDown(event));
         window.addEventListener('pointermove', (event) => this.pointerMove(event));
@@ -70,6 +95,37 @@ export default (config) => ({
 
     columns() {
         return [...this.$refs.board.querySelectorAll('.cal-col')];
+    },
+
+    /** Šipky v záhlaví: posun o tolik sloupců, kolik je jich celých vidět (aspoň o jeden). */
+    panBy(direction) {
+        const scroll = this.$refs.scroll;
+        const columns = this.columns();
+        const width = columns[0]?.getBoundingClientRect().width || 180;
+        const visible = (scroll.clientWidth - (columns[0]?.offsetLeft ?? 0)) / width;
+
+        scroll.scrollBy({ left: direction * Math.max(1, Math.floor(visible)) * width, behavior: 'smooth' });
+    },
+
+    /** Vodorovná poloha se pamatuje jen pro stejný počet sloupců (stejný pohled) a jen v této záložce. */
+    remember() {
+        try {
+            sessionStorage.setItem(PAN_KEY, JSON.stringify({ columns: this.columns().length, left: Math.round(this.$refs.scroll.scrollLeft) }));
+        } catch (e) {
+            // bez úložiště se rozvrh po načtení jen vrátí na začátek
+        }
+    },
+
+    restore() {
+        try {
+            const saved = JSON.parse(sessionStorage.getItem(PAN_KEY) || 'null');
+
+            if (saved && saved.columns === this.columns().length && saved.left > 0) {
+                this.$refs.scroll.scrollLeft = saved.left;
+            }
+        } catch (e) {
+            // viz remember()
+        }
     },
 
     /** Minuty od půlnoci v místě, kde je ukazatel ve sloupci. */
@@ -168,7 +224,7 @@ export default (config) => ({
         }
     },
 
-    /** U okraje okna stránku při tažení posouvá, aby šlo rezervaci dotáhnout i na čas, který není vidět. */
+    /** U okraje okna stránku (a mřížku do strany) při tažení posouvá, aby šlo rezervaci dotáhnout i tam, kam není vidět. */
     autoScroll() {
         const step = () => {
             const drag = this.drag;
@@ -187,6 +243,24 @@ export default (config) => ({
 
                 if (window.scrollY !== before) {
                     this.place(drag.pointerX ?? drag.x, y);
+                }
+            }
+
+            // Do strany: u levého (za osou času) a pravého okraje mřížky, když je víc sloupců, než se vejde.
+            const scroll = this.$refs.scroll;
+            const box = scroll.getBoundingClientRect();
+            const x = drag.pointerX ?? drag.x;
+            const left = box.left + (this.columns()[0]?.offsetLeft ?? 0) + EDGE_X;
+            const right = box.right - EDGE_X;
+            const sideways = x < left ? -Math.ceil((left - x) / 5) : x > right ? Math.ceil((x - right) / 5) : 0;
+
+            if (sideways !== 0) {
+                const before = scroll.scrollLeft;
+
+                scroll.scrollLeft += sideways;
+
+                if (scroll.scrollLeft !== before) {
+                    this.place(x, y);
                 }
             }
 

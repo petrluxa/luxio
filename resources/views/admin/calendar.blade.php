@@ -123,8 +123,9 @@
         <div class="banner mb-3">Státní svátek: {{ $holiday }} – zavřeno</div>
     @endif
 
-    {{-- Mřížka: sloupce = lidé z týmu (u jednoho člověka jeho sedm dní), řádky po půl hodině. Rezervace jdou přetáhnout. --}}
-    <div class="cal-scroll"
+    {{-- Mřížka: sloupce = lidé z týmu (u jednoho člověka jeho sedm dní), řádky po půl hodině. Rezervace jdou přetáhnout.
+         Sloupec má všude stejnou nejmenší šířku; co se nevejde, posouvá se do strany (šipkami v záhlaví, na telefonu prstem). --}}
+    <div class="cal-frame"
          x-data="calendarBoard(@js([
              'dayStart' => $dayStart,
              'dayEnd' => $dayEnd,
@@ -132,17 +133,26 @@
              'snap' => $slotStep,
              'moveUrl' => route('admin.bookings.drop', ['booking' => '__ID__']),
          ]))">
-        <div class="cal @if ($week) cal-week @elseif (count($columns) >= 8) cal-dense @endif" style="--cal-cols: {{ count($columns) }}; --cal-half: {{ $half }}px" x-ref="board">
-            {{-- Záhlaví sloupců: u jednoho člověka dny, jinak lidé s pracovní dobou --}}
+        {{-- Záhlaví sloupců: u jednoho člověka dny, jinak lidé s pracovní dobou. Drží se pod horní lištou
+             a do strany se posouvá spolu s mřížkou (hlídá to skript). --}}
+        <div class="cal-headbar">
+        <div class="cal-headbar-scroll" x-ref="headbar">
+        <div class="cal @if ($week) cal-week @endif" style="--cal-cols: {{ count($columns) }}">
             <div class="cal-corner">Čas</div>
             @foreach ($columns as $column)
                 @if ($week)
-                    {{-- Den vede na rozvrh celého salonu v ten den. --}}
-                    <a class="cal-head @if ($column['date']->equalTo($today)) is-today @endif" href="{{ route('admin.calendar', ['kadernice' => 'vse', 'datum' => $column['date']->toDateString()]) }}"
-                       aria-label="{{ Cz::dateLong($column['date']) }} – celý salon">
-                        <b>{{ $column['date']->equalTo($today) ? 'Dnes' : mb_convert_case(Cz::dayShort($column['date']), MB_CASE_TITLE) }} {{ $column['date']->day }}. {{ $column['date']->month }}.</b>
-                        <span>{{ $hoursLabel($column) }}</span>
-                    </a>
+                    {{-- Den vede správce na rozvrh celého salonu v ten den; kadeřnici posune její týden na ten den.
+                         Tlačítko + zapíše další zákaznici i na čas, kde už někdo je. --}}
+                    <div class="cal-head @if ($column['date']->equalTo($today)) is-today @endif">
+                        <a class="cal-head-day"
+                           href="{{ $wholeSalon ? route('admin.calendar', ['kadernice' => 'vse', 'datum' => $column['date']->toDateString()]) : $link(['datum' => $column['date']->toDateString()]) }}"
+                           aria-label="{{ Cz::dateLong($column['date']) }}@if ($wholeSalon) – celý salon @endif">
+                            <b>{{ $column['date']->equalTo($today) ? 'Dnes' : mb_convert_case(Cz::dayShort($column['date']), MB_CASE_TITLE) }} {{ $column['date']->day }}. {{ $column['date']->month }}.</b>
+                            <span>{{ $hoursLabel($column) }}</span>
+                        </a>
+                        <a class="cal-add" href="{{ route('admin.bookings.create', ['datum' => $column['date']->toDateString(), 'kadernice' => $column['staff']->id]) }}"
+                           aria-label="Nová rezervace – {{ Cz::dateLong($column['date']) }}">@include('partials.icon', ['name' => 'plus', 'size' => 18])</a>
+                    </div>
                 @else
                     <div class="cal-staff">
                         <span class="cal-staff-dot" style="background: {{ $column['staff']->color }}" aria-hidden="true"></span>
@@ -156,7 +166,14 @@
                     </div>
                 @endif
             @endforeach
+        </div>
+        </div>
+            <button type="button" class="cal-pan cal-pan-prev" style="display: none" x-show="pan.left" x-on:click="panBy(-1)" aria-label="Posunout rozvrh doleva">‹</button>
+            <button type="button" class="cal-pan cal-pan-next" style="display: none" x-show="pan.right" x-on:click="panBy(1)" aria-label="Posunout rozvrh doprava">›</button>
+        </div>
 
+        <div class="cal-scroll" x-ref="scroll">
+        <div class="cal @if ($week) cal-week @endif" style="--cal-cols: {{ count($columns) }}; --cal-half: {{ $half }}px" x-ref="board">
             {{-- Osa času po půl hodině --}}
             <div class="cal-hours" style="height: {{ $height }}px">
                 @for ($minute = $dayStart; $minute < $dayEnd; $minute += 30)
@@ -182,14 +199,15 @@
                            aria-label="Nová rezervace {{ Cz::date($day) }} v {{ Cz::time($cell) }}@if (! $week) – {{ $column['staff']->name }}@endif"></a>
                     @endfor
 
-                    {{-- Rezervace po úsecích: práce, pauza (působí barva), úklid.
-                         Když se dvě kryjí, stojí vedle sebe (pruhy z CalendarLanes). --}}
+                    {{-- Rezervace je jeden plný kus přes celou šířku sloupce: práce, působení barvy a dokončení
+                         na sebe navazují (úklid po zákaznici se nekreslí). Když se dvě kryjí, stojí vedle sebe
+                         (pruhy z CalendarLanes). --}}
                     @foreach ($column['bookings'] as $booking)
                         @php
                             $firstWork = true;
                             $place = $column['lanes'][$booking->id] ?? ['lane' => 0, 'lanes' => 1];
-                            $box = 'left: calc(2px + (100% - var(--cal-gutter)) * '.$place['lane'].' / '.$place['lanes'].'); '
-                                .'width: calc((100% - var(--cal-gutter)) / '.$place['lanes'].' - 3px);';
+                            $box = 'left: calc(2px + (100% - 4px) * '.$place['lane'].' / '.$place['lanes'].'); '
+                                .'width: calc((100% - 4px) / '.$place['lanes'].' - '.($place['lanes'] > 1 ? 2 : 0).'px);';
                             $pending = $booking->status === BookingStatus::Pending;
                             $done = ! $pending && ($booking->isPaid() || $booking->status === BookingStatus::Completed || $booking->ends_at->isPast());
                             $state = match (true) {
@@ -197,38 +215,55 @@
                                 $booking->isPaid() => 'zaplaceno',
                                 default => '',
                             };
+                            // V bloku je jen příjmení, vpravo nahoře telefon a vpravo dole úkon; celé jméno je v popisku.
+                            $surname = $booking->customer->surname();
+                            $phone = $booking->customer->phone ? Cz::phoneShort($booking->customer->phone) : '';
+                            $what = $booking->servicesLabel();
+                            $parts = $booking->segments->reject(fn ($segment) => $segment->type === SegmentType::Buffer)->values();
+                            $stateClasses = ['is-pending' => $pending, 'is-done' => $done, 'is-no-show' => $booking->status === BookingStatus::NoShow];
                         @endphp
-                        @foreach ($booking->segments as $segment)
+                        @foreach ($parts as $segment)
                             @php
                                 $top = $y($segment->starts_at, $day);
-                                $segmentHeight = max(4, $y($segment->ends_at, $day) - $top);
+                                // Pod koncem rezervace zůstává tenká mezera, aby se dvě po sobě nespojily v jednu.
+                                $segmentHeight = max(4, $y($segment->ends_at, $day) - $top - ($loop->last ? 2 : 0));
                             @endphp
                             @if ($segment->type === SegmentType::Work)
-                                <a @class(['cal-block', 'is-pending' => $pending, 'is-done' => $done, 'is-no-show' => $booking->status === BookingStatus::NoShow])
+                                {{-- Nízký blok (do 40 min) má příjmení a úkon na jednom řádku, nejnižší (do 25 min) jen záhlaví s příjmením. --}}
+                                <a @class(['cal-block', 'is-first' => $loop->first, 'is-last' => $loop->last,
+                                        'is-tiny' => $segmentHeight < 30, 'is-short' => $segmentHeight >= 30 && $segmentHeight < 50] + $stateClasses)
                                    style="top: {{ $top }}px; height: {{ $segmentHeight }}px; {{ $box }}" href="{{ route('admin.bookings.show', $booking) }}"
                                    data-booking="{{ $booking->id }}" data-start="{{ $booking->starts_at->hour * 60 + $booking->starts_at->minute }}"
                                    data-duration="{{ $booking->durationMinutes() }}" data-name="{{ $booking->customer->name }}"
                                    @if ($booking->status->isActive()) data-draggable draggable="false" @endif
-                                   aria-label="{{ Cz::time($booking->starts_at) }} {{ $booking->customer->name }}, {{ $booking->servicesLabel() }}">
+                                   title="{{ $booking->customer->name }}@if ($phone) · {{ $phone }}@endif · {{ $what }}"
+                                   aria-label="{{ Cz::time($booking->starts_at) }} {{ $booking->customer->name }}, {{ $what }}@if ($state), {{ $state }}@endif">
                                     @if ($firstWork)
                                         <span class="cal-block-head">
-                                            <span>{{ Cz::time($booking->starts_at) }} ({{ $short($booking->durationMinutes()) }})</span>
-                                            @if ($state)<i>{{ $state }}</i>@endif
+                                            <span class="cal-block-time">
+                                                <span>{{ Cz::time($booking->starts_at) }}<span class="cal-block-dur"> ({{ $short($booking->durationMinutes()) }})</span></span>
+                                                <b>{{ $surname }}</b>
+                                                @if ($state)<i class="cal-block-state">@include('partials.icon', ['name' => $pending ? 'clock' : 'pending', 'size' => 12])<span>{{ $state }}</span></i>@endif
+                                            </span>
+                                            @if ($phone)<span class="cal-block-tag">@include('partials.icon', ['name' => 'phone', 'size' => 11])<span>{{ $phone }}</span></span>@endif
                                         </span>
-                                        <b>{{ $booking->customer->name }}</b>
-                                        <span class="cal-block-meta">@if ($booking->customer->phone){{ Cz::phoneShort($booking->customer->phone) }} · @endif{{ $booking->servicesLabel() }}</span>
+                                        <span class="cal-block-body">
+                                            <span class="cal-block-who">@include('partials.icon', ['name' => 'customers', 'size' => 13])<b>{{ $surname }}</b></span>
+                                            <span class="cal-block-what">{{ $what }}</span>
+                                        </span>
                                     @else
-                                        <span class="cal-block-head"><span>{{ Cz::time($segment->starts_at) }} · dokončení</span></span>
-                                        <b>{{ $booking->customer->name }}</b>
+                                        <span class="cal-block-head">
+                                            <span class="cal-block-time"><span>{{ Cz::time($segment->starts_at) }} · dokončení</span><b>{{ $surname }}</b></span>
+                                        </span>
+                                        <span class="cal-block-body">
+                                            <span class="cal-block-who">@include('partials.icon', ['name' => 'customers', 'size' => 13])<b>{{ $surname }}</b></span>
+                                        </span>
                                     @endif
                                 </a>
                                 @php $firstWork = false; @endphp
-                            @elseif ($segment->type === SegmentType::Pause)
-                                <div class="cal-pause" style="top: {{ $top }}px; height: {{ $segmentHeight }}px; {{ $box }}">
-                                    <span>působí barva · {{ $booking->customer->name }}</span>
-                                </div>
                             @else
-                                <div class="cal-buffer" style="top: {{ $top }}px; height: {{ $segmentHeight }}px; {{ $box }}" title="Úklid"></div>
+                                <div @class(['cal-pause', 'is-first' => $loop->first, 'is-last' => $loop->last] + $stateClasses)
+                                     style="top: {{ $top }}px; height: {{ $segmentHeight }}px; {{ $box }}">působí barva</div>
                             @endif
                         @endforeach
                     @endforeach
@@ -238,6 +273,7 @@
                     @endif
                 </div>
             @endforeach
+        </div>
         </div>
 
         {{-- Potvrzení přesunu po přetažení --}}
@@ -258,8 +294,9 @@
 
     <p class="label mt-3">
         Rezervaci přetáhnete myší na jiný čas{{ $week ? ' nebo den' : ' nebo k jiné kadeřnici' }} (na telefonu ji nejdřív chvíli podržte).
-        @if ($week)Další dny na telefonu posunete prstem do strany, šipky nahoře posouvají o týden.@endif
+        @if ($week)Další dny na telefonu posunete prstem do strany, šipky nahoře posouvají o týden.
+        @else Když se všechny sloupce nevejdou, posunete rozvrh do strany šipkami v záhlaví (na telefonu prstem).@endif
         Kliknutím na volné místo vytvoříte novou, kliknutím na rezervaci otevřete detail a vyúčtování.
-        @if (! $week)Další zákaznici na stejný čas přidáte tlačítkem + u jména kadeřnice.@endif
+        Další zákaznici na čas, kde už někdo je, přidáte tlačítkem + v záhlaví sloupce.
     </p>
 @endsection

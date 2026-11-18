@@ -156,7 +156,7 @@ test('nastavení a správa kadeřnic jsou jen pro majitelku', function () {
     $this->get('/admin/kadernice')->assertForbidden();
     $this->get('/admin/kadernice/nova')->assertForbidden();
     $this->post('/admin/pripravky/katalog')->assertForbidden();
-    $this->get('/admin/vice')->assertOk()->assertSee('Ceník služeb')->assertDontSee('Pravidla rezervací')->assertDontSee('Údaje salonu');
+    $this->get('/admin/vice')->assertOk()->assertSee('Můj ceník')->assertDontSee('Pravidla rezervací')->assertDontSee('Údaje salonu');
     $this->get('/admin/ucet')->assertOk()->assertSee('Změna hesla');
 });
 

@@ -1,6 +1,6 @@
 @extends('layouts.admin')
 
-@section('title', 'Tým')
+@section('title', 'Kadeřnice')
 
 @php
     $bookable = $users->where('is_bookable', true)->values();
@@ -8,9 +8,12 @@
 
 @section('content')
     <a class="back-link" href="{{ route('admin.more') }}">Admin</a>
-    <h1 class="screen-title">Tým</h1>
+    <h1 class="screen-title">Kadeřnice</h1>
 
-    <p class="label mb-3">Pořadí odpovídá sloupcům v rozvrhu – šipkami ho změníte. Zaměření dělí rozvrh na skupiny.</p>
+    <p class="label mb-3">
+        Ťuknutím na jméno otevřete její nastavení: přihlášení, pracovní dobu, ceník a rozvrh.
+        Pořadí odpovídá sloupcům v rozvrhu – šipkami ho změníte.
+    </p>
 
     @foreach ($users as $member)
         <div class="row">
@@ -18,8 +21,8 @@
             <a class="row-main" href="{{ route('admin.staff.edit', $member) }}">
                 <b>{{ $member->name }}@if ($member->position) <span class="inline font-normal text-muted">· {{ $member->position }}</span>@endif</b>
                 <span>
-                    {{ $member->role->label() }} ·
-                    {{ $member->canLogIn() ? 'přihlašuje se jako '.$member->login : 'bez vlastního přihlášení' }}@if (! $member->is_bookable) · není v rozvrhu @endif
+                    {{ $member->canLogIn() ? 'přihlašuje se jako '.$member->login : 'bez vlastního přihlášení' }} ·
+                    {{ $member->isOwner() ? 'správce – vidí celý salon' : 'vidí jen svůj rozvrh' }}@if (! $member->is_bookable) · nemá sloupec v rozvrhu @endif
                 </span>
             </a>
             @if ($member->is_bookable && $bookable->count() > 1)
@@ -32,10 +35,10 @@
         </div>
     @endforeach
 
-    <a class="btn btn-primary btn-block mt-3" href="{{ route('admin.staff.create') }}">Přidat do týmu</a>
+    <a class="btn btn-primary btn-block mt-3" href="{{ route('admin.staff.create') }}">Přidat kadeřnici nebo recepci</a>
 
     <p class="label mt-3">
-        Kdo má vlastní přihlášení, nastavuje si pracovní dobu, volno i soboty a neděle sám (Admin → Pracovní doba a volno)
-        a svůj ceník (Admin → Ceník služeb). Jako správce je můžete upravit komukoliv.
+        Kadeřnice se svým jménem a heslem vidí jen svůj rozvrh a své zákaznice a sama si nastavuje pracovní dobu a ceník.
+        Celý salon vidí jen správce – majitelka a recepce. Jako správce můžete nastavení upravit komukoliv.
     </p>
 @endsection

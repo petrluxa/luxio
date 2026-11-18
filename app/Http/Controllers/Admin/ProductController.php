@@ -50,15 +50,18 @@ class ProductController extends AdminController
     public function lookup(Request $request): JsonResponse
     {
         $q = trim((string) $request->query('q'));
+        // Druh (barvy, šampony…) vybraný ťuknutím: vypíše celý druh i bez psaní.
+        $category = ProductCategory::tryFrom((string) $request->query('druh'));
 
-        if (mb_strlen($q) < 2) {
+        if (mb_strlen($q) < 2 && ! $category) {
             return response()->json([]);
         }
 
         return response()->json(
-            $this->search($q)->where('is_active', true)
+            $this->search(mb_strlen($q) >= 2 ? $q : '')->where('is_active', true)
+                ->when($category, fn (Builder $query) => $query->where('category', $category->value))
                 ->orderBy('brand')->orderBy('line')->orderBy('name')
-                ->limit(12)->get()
+                ->limit($category ? 80 : 12)->get()
                 ->map(fn (Product $p) => ['id' => $p->id, 'name' => $p->fullName(), 'meta' => $p->meta()])
         );
     }

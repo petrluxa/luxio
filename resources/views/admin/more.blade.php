@@ -7,25 +7,38 @@
     $owner = $me->isOwner();
 
     // Boxíky: [adresa, ikona, název, popis, počet]. Co přibude, přidá se sem.
-    $groups = [
+    // Správce salonu (majitelka, recepce) má celý salon; kadeřnice jen svůj rozvrh a své nastavení.
+    $groups = $owner ? [
         'Provoz' => [
-            [route('admin.calendar'), 'calendar', 'Rozvrh', 'Den celého salonu nebo skupiny, týden, přetahování rezervací', null],
+            [route('admin.calendar'), 'calendar', 'Rozvrh', 'Den celého salonu nebo skupiny, týden jedné kadeřnice, přetahování rezervací', null],
             [route('admin.pending'), 'pending', 'Ke schválení', 'Rezervace nových zákaznic', ($pendingCount ?? 0) ?: null],
             [route('admin.customers.index'), 'customers', 'Zákaznice', 'Karty, historie návštěv, osobní odkazy', $counts['customers']],
         ],
-        'Nabídka a ceník' => array_values(array_filter([
-            [route('admin.services.index'), 'price', 'Ceník služeb', 'Každý si nastavuje, co dělá a za kolik', $counts['services']],
-            $me->is_bookable || $owner ? [route('admin.hours'), 'clock', 'Pracovní doba a volno', 'Týdenní rozvrh včetně soboty a neděle, dovolená', null] : null,
-            [route('admin.products.index'), 'bottle', 'Přípravky', 'Barvy, šampony, péče, styling, ampule', $counts['products']],
-        ])),
-        'Salon' => $owner ? [
-            [route('admin.staff.index'), 'team', 'Tým', 'Kadeřnice, manikúra, pedikúra, kosmetika – sloupce rozvrhu a přihlášení', $counts['staff']],
+        'Salon' => [
+            [route('admin.staff.index'), 'team', 'Kadeřnice', 'Každá má své přihlášení, pracovní dobu, ceník a sloupec v rozvrhu', $counts['staff']],
             [route('admin.settings'), 'salon', 'Údaje salonu a doklad', 'Název, adresa, telefon, provozovatel a IČO', null],
             [route('admin.settings').'#pravidla', 'rules', 'Pravidla rezervací', 'Lhůty, krok nabídky časů, schvalování, připomínky', null],
-        ] : [],
+        ],
+        'Nabídka a ceník' => [
+            [route('admin.services.index'), 'price', 'Ceník služeb', 'Společné služby a ceník každé kadeřnice', $counts['services']],
+            [route('admin.hours'), 'clock', 'Pracovní doba a volno', 'Týdenní rozvrh každé kadeřnice včetně soboty a neděle, dovolená', null],
+            [route('admin.products.index'), 'bottle', 'Přípravky', 'Barvy, šampony, péče, styling, ampule', $counts['products']],
+        ],
         'Můj účet' => [
             [route('admin.account'), 'bell', 'Heslo a upozornění', 'Změna hesla, upozornění na tomto zařízení, odhlášení', null],
         ],
+    ] : [
+        'Provoz' => [
+            [route('admin.calendar'), 'calendar', 'Můj rozvrh', 'Sedm dní od dneška, přetahování rezervací', null],
+            [route('admin.pending'), 'pending', 'Ke schválení', 'Rezervace nových zákaznic u mě', ($pendingCount ?? 0) ?: null],
+            [route('admin.customers.index'), 'customers', 'Moje zákaznice', 'Karty, historie návštěv, osobní odkazy', $counts['customers']],
+        ],
+        'Moje nastavení' => array_values(array_filter([
+            [route('admin.services.index'), 'price', 'Můj ceník', 'Co dělám, za kolik a jak dlouho', null],
+            $me->is_bookable ? [route('admin.hours'), 'clock', 'Moje pracovní doba a volno', 'Týdenní rozvrh včetně soboty a neděle, dovolená', null] : null,
+            [route('admin.products.index'), 'bottle', 'Přípravky', 'Barvy, šampony, péče, styling, ampule', $counts['products']],
+            [route('admin.account'), 'bell', 'Heslo a upozornění', 'Změna hesla, upozornění na tomto zařízení, odhlášení', null],
+        ])),
     ];
 @endphp
 

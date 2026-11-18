@@ -8,7 +8,10 @@ use App\Enums\PaymentMethod;
 use App\Exceptions\BookingActionException;
 use App\Exceptions\SlotUnavailableException;
 use App\Models\Booking;
+use App\Models\BookingItem;
 use App\Models\Customer;
+use App\Models\Service;
+use App\Services\Availability\EffectiveService;
 use App\Services\Booking\BookingManager;
 use App\Services\Booking\BookingWizard;
 use App\Services\Booking\Checkout;
@@ -57,12 +60,100 @@ class BookingController extends AdminController
     {
         $booking = $this->ownBooking($booking)->load('customer', 'items', 'staff', 'segments', 'salon', 'products');
 
+        $editable = ! $booking->status->isCancelled() && $booking->status !== BookingStatus::NoShow && ! $booking->isPaid();
+        $staff = $booking->staff->loadMissing('services');
+
         return view('admin.bookings.show', [
             'tab' => 'calendar',
             'booking' => $booking,
             // Komu jde rezervaci předat (ostatní kadeřnice v rozvrhu).
             'others' => $this->staffList()->reject(fn ($member) => $member->id === $booking->staff_id)->values(),
+            // Úkony jdou přidávat a odebírat, dokud návštěva není zaplacená nebo zrušená.
+            'editable' => $editable,
+            // Co jde přidat: ceník kadeřnice, u které rezervace je (její ceny a délky).
+            'addable' => $editable
+                ? $staff->services->where('is_active', true)->sortBy('sort')->values()
+                    ->map(fn (Service $service) => ['id' => $service->id, 'service' => EffectiveService::for($service, $staff)])
+                : collect(),
         ]);
+    }
+
+    /** Další úkon k rezervaci (zákaznice si při návštěvě řekla o něco navíc). */
+    public function addItem(Request $request, Booking $booking): RedirectResponse
+    {
+        $booking = $this->ownBooking($booking)->load('staff', 'salon');
+        $service = $this->ownService(Service::findOrFail($request->integer('service')));
+
+        try {
+            $overlaps = $this->manager->addService($booking, $service);
+        } catch (BookingActionException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $booking->refresh();
+
+        return back()->with('status', 'Přidáno: '.$service->name.'. Návštěva teď trvá do '.Cz::time($booking->ends_at).' a stojí '.$booking->load('items')->priceLabel().'.'
+            .($overlaps ? ' Pozor: zasahuje do další zákaznice nebo mimo pracovní dobu.' : ''));
+    }
+
+    public function removeItem(Booking $booking, BookingItem $item): RedirectResponse
+    {
+        $booking = $this->ownBooking($booking)->load('staff', 'salon');
+
+        try {
+            $this->manager->removeItem($booking, $item);
+        } catch (BookingActionException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('status', 'Odebráno: '.$item->name.'.');
+    }
+
+    /** Přípravky použité při návštěvě – samostatně, bez placení. */
+    public function productsForm(Booking $booking): View|RedirectResponse
+    {
+        $booking = $this->ownBooking($booking)->load('customer', 'items', 'staff', 'products');
+
+        if ($booking->status->isCancelled() || $booking->status === BookingStatus::NoShow) {
+            return redirect()->route('admin.bookings.show', $booking)->with('error', 'U zrušené návštěvy se přípravky nezapisují.');
+        }
+
+        return view('admin.bookings.products', ['tab' => 'calendar', 'booking' => $booking, 'last' => $this->previousVisit($booking)]);
+    }
+
+    public function products(Request $request, Booking $booking): RedirectResponse
+    {
+        $booking = $this->ownBooking($booking);
+
+        $data = $request->validate([
+            'products' => ['nullable', 'array', 'max:40'],
+            'products.*.id' => ['nullable', 'integer'],
+            'products.*.name' => ['nullable', 'string', 'max:255'],
+            'products.*.note' => ['nullable', 'string', 'max:160'],
+        ]);
+
+        try {
+            $this->checkout->save($booking, array_values($data['products'] ?? []), null);
+        } catch (BookingActionException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('admin.bookings.show', $booking)->with('status', 'Použité přípravky jsou uložené.');
+    }
+
+    /** Poslední dřívější návštěva zákaznice se zapsanými přípravky – nejčastěji se použije totéž. */
+    private function previousVisit(Booking $booking): ?Booking
+    {
+        return Booking::query()
+            ->where('customer_id', $booking->customer_id)
+            ->whereKeyNot($booking->id)
+            ->where('starts_at', '<', $booking->starts_at)
+            // Kadeřnice vidí jen to, co zákaznici dávala sama.
+            ->when(! $this->user()->isOwner(), fn ($query) => $query->where('staff_id', $this->user()->id))
+            ->whereHas('products')
+            ->with('products')
+            ->orderByDesc('starts_at')
+            ->first();
     }
 
     /** Nová rezervace ručně – z kalendáře přijde předvyplněné datum, čas a kadeřnice. */
@@ -70,10 +161,10 @@ class BookingController extends AdminController
     {
         $salon = $this->salon();
         $customer = $request->filled('zakaznice')
-            ? $salon->customers()->find($request->integer('zakaznice'))
+            ? Customer::query()->visibleTo($this->user())->find($request->integer('zakaznice'))
             : null;
 
-        $options = $this->wizard->options($salon);
+        $options = $this->wizard->options($salon, $this->staffScope());
         $staffIds = array_column($options['staff'], 'id');
         $staffId = collect([(int) $request->old('staff'), $request->integer('kadernice'), $this->user()->id])
             ->first(fn ($id) => in_array($id, $staffIds, true));
@@ -107,7 +198,7 @@ class BookingController extends AdminController
         return response()->json($this->wizard->slots(
             salon: $this->salon(),
             serviceIds: array_map('intval', (array) $request->query('services', [])),
-            staffId: $request->integer('staff') ?: null,
+            staffId: $this->staffScope() ?? ($request->integer('staff') ?: null),
             from: $request->query('from'),
             ignoreLimits: true,
             ignoreBookingId: $moving?->id,
@@ -118,7 +209,7 @@ class BookingController extends AdminController
     public function store(Request $request): RedirectResponse
     {
         $salon = $this->salon();
-        $selection = $this->wizard->resolve($salon, $request->all());
+        $selection = $this->wizard->resolve($salon, $request->all(), $this->staffScope());
 
         $request->merge(['customer_phone' => Cz::normalizePhone($request->input('customer_phone'))]);
 
@@ -135,7 +226,7 @@ class BookingController extends AdminController
         try {
             $booking = DB::transaction(function () use ($salon, $data, $selection, $force) {
                 $customer = ! empty($data['customer_id'])
-                    ? $salon->customers()->findOrFail($data['customer_id'])
+                    ? Customer::query()->visibleTo($this->user())->findOrFail($data['customer_id'])
                     : Customer::create([
                         'salon_id' => $salon->id,
                         'name' => trim($data['customer_name']),
@@ -211,7 +302,7 @@ class BookingController extends AdminController
             return redirect()->route('admin.bookings.show', $booking)->with('error', 'Tuto rezervaci už nelze přesunout.');
         }
 
-        $options = $this->wizard->options($this->salon());
+        $options = $this->wizard->options($this->salon(), $this->staffScope());
 
         return view('admin.bookings.move', [
             'tab' => 'calendar',
@@ -244,8 +335,9 @@ class BookingController extends AdminController
             'time' => ['required', 'regex:/^([01]?\d|2[0-3]):[0-5]\d$/'],
         ], ['date.required' => 'Vyberte prosím den.', 'time.required' => 'Vyberte prosím čas.']);
 
-        $staff = ! empty($data['staff'])
-            ? ($this->salon()->staff()->whereKey($data['staff'])->first()
+        // Kadeřnice přesouvá jen ve svém rozvrhu; jinou kadeřnici vybírá jen správce.
+        $staff = ! empty($data['staff']) && $this->staffScope() === null
+            ? ($this->visibleStaff((int) $data['staff'])
                 ?? throw ValidationException::withMessages(['staff' => 'Vybraná kadeřnice už nepřijímá rezervace.']))
             : null;
 
@@ -273,7 +365,8 @@ class BookingController extends AdminController
             'time' => ['required', 'regex:/^([01]?\d|2[0-3]):[0-5]\d$/'],
         ]);
 
-        $staff = $this->salon()->staff()->whereKey($data['staff'])->first();
+        // Jen mezi sloupci, které přihlášený vidí (kadeřnice jen mezi svými dny).
+        $staff = $this->visibleStaff((int) $data['staff']);
 
         if (! $staff) {
             return response()->json(['message' => 'Tato kadeřnice už není v rozvrhu.'], 422);
@@ -298,9 +391,14 @@ class BookingController extends AdminController
         return response()->json(['ok' => true, 'message' => $message, 'overlap' => $busy]);
     }
 
-    /** Předání rezervace jiné kadeřnici ve stejný čas (nemoc, záskok) – i když má plno. */
+    /**
+     * Předání rezervace jiné kadeřnici ve stejný čas (nemoc, záskok) – i když má plno.
+     * Jen správce salonu: kadeřnice kolegyně ani jejich rozvrh nevidí.
+     */
     public function reassign(Request $request, Booking $booking): RedirectResponse
     {
+        $this->ownerOnly();
+
         $booking = $this->ownBooking($booking)->load('items');
 
         $staff = $this->salon()->staff()->whereKey($request->integer('kadernice'))->first()
@@ -332,17 +430,7 @@ class BookingController extends AdminController
             return redirect()->route('admin.bookings.show', $booking)->with('error', 'Tuto návštěvu nelze vyúčtovat.');
         }
 
-        // Co měla zákaznice minule – nejčastěji se použije totéž.
-        $last = Booking::query()
-            ->where('customer_id', $booking->customer_id)
-            ->whereKeyNot($booking->id)
-            ->where('starts_at', '<', $booking->starts_at)
-            ->whereHas('products')
-            ->with('products')
-            ->orderByDesc('starts_at')
-            ->first();
-
-        return view('admin.bookings.checkout', ['tab' => 'calendar', 'booking' => $booking, 'last' => $last]);
+        return view('admin.bookings.checkout', ['tab' => 'calendar', 'booking' => $booking, 'last' => $this->previousVisit($booking)]);
     }
 
     public function checkout(Request $request, Booking $booking): RedirectResponse

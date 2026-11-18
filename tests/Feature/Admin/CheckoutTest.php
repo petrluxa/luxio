@@ -285,3 +285,137 @@ describe('doklad o zaplacení', function () {
         $this->get($url)->assertNotFound();
     });
 });
+
+describe('úkon navíc a přípravky z detailu rezervace', function () {
+    beforeEach(function () {
+        // Druhý úkon v ceníku Petry: 30 minut za 300 Kč (základní střih má 45 minut za 550 Kč).
+        $this->blow = service($this->salon, ['name' => 'Foukaná', 'price_from' => 300, 'work_1' => 30], $this->petra);
+    });
+
+    test('detail nabízí přidání úkonu a zápis přípravků', function () {
+        $this->get("/admin/rezervace/{$this->booking->id}")->assertOk()
+            ->assertSeeInOrder(['Úkony', 'Dámský střih', 'Přidat úkon', 'Foukaná', Cz::duration(30), Cz::price(300, null), 'Přípravky', 'Zatím nic zapsaného', 'Zapsat přípravky', 'Vyúčtování', 'Vyúčtovat'])
+            ->assertSee("rezervace/{$this->booking->id}/pripravky", false)
+            // Jediný úkon odebrat nejde.
+            ->assertDontSee('Odebrat úkon');
+    });
+
+    test('přidaný úkon rezervaci prodlouží, sečte cenu a zapíše se do rozvrhu', function () {
+        $this->post("/admin/rezervace/{$this->booking->id}/ukony", ['service' => $this->blow->id])
+            ->assertSessionHas('status', fn (string $status) => str_contains($status, 'Přidáno: Foukaná') && str_contains($status, '11:15') && str_contains($status, Cz::money(850)) && ! str_contains($status, 'Pozor'));
+
+        $booking = $this->booking->fresh(['items', 'segments']);
+
+        expect($booking->items->pluck('name')->all())->toBe(['Dámský střih', 'Foukaná'])
+            ->and($booking->total_price)->toBe(850)
+            ->and($booking->starts_at)->toEqual(at('10:00'))
+            ->and($booking->ends_at)->toEqual(at('11:15'))
+            ->and($booking->segments->max('ends_at'))->toEqual(at('11:15'));
+
+        $this->get("/admin/rezervace/{$booking->id}")->assertOk()->assertSee('Odebrat úkon Foukaná')->assertSee('10:00–11:15');
+        $this->get('/admin/kalendar?kadernice=vse&datum='.TEST_DAY)->assertOk()->assertSee('Dámský střih + Foukaná');
+
+        // Vyúčtování nabídne sečtenou cenu.
+        $this->get("/admin/rezervace/{$booking->id}/vyuctovani")->assertOk()->assertSee('value="850"', false);
+    });
+
+    test('úkon jde přidat i přes další zákaznici – s upozorněním', function () {
+        $this->manager->create(customer($this->salon), [$this->cut], at('10:45'), $this->petra, ignoreLimits: true);
+
+        $this->post("/admin/rezervace/{$this->booking->id}/ukony", ['service' => $this->blow->id])
+            ->assertSessionHas('status', fn (string $status) => str_contains($status, 'Pozor'));
+
+        expect($this->booking->fresh()->ends_at)->toEqual(at('11:15'));
+    });
+
+    test('odebrání úkonu rezervaci zase zkrátí, poslední úkon odebrat nejde', function () {
+        $this->post("/admin/rezervace/{$this->booking->id}/ukony", ['service' => $this->blow->id]);
+        $booking = $this->booking->fresh('items');
+        [$cut, $blow] = $booking->items->all();
+
+        $this->post("/admin/rezervace/{$booking->id}/ukony/{$cut->id}/odebrat")->assertSessionHas('status', 'Odebráno: Dámský střih.');
+
+        $booking = $booking->fresh('items');
+
+        expect($booking->items->pluck('name')->all())->toBe(['Foukaná'])
+            ->and($booking->total_price)->toBe(300)
+            ->and($booking->ends_at)->toEqual(at('10:30'));
+
+        $this->post("/admin/rezervace/{$booking->id}/ukony/{$blow->id}/odebrat")->assertSessionHas('error');
+        expect($booking->fresh('items')->items)->toHaveCount(1);
+    });
+
+    test('u zaplacené nebo zrušené návštěvy se úkony nemění a cizí úkon přidat nejde', function () {
+        // Úkon, který Petra v ceníku nemá, a úkon z cizího salonu.
+        $other = staffMember($this->salon, attributes: ['name' => 'Lucie', 'login' => 'lucie']);
+        $nails = service($this->salon, ['name' => 'Manikúra'], $other);
+        [$foreign] = salonWithStaff();
+
+        $this->post("/admin/rezervace/{$this->booking->id}/ukony", ['service' => $nails->id])->assertSessionHas('error');
+        $this->post("/admin/rezervace/{$this->booking->id}/ukony", ['service' => service($foreign)->id])->assertNotFound();
+        $this->post("/admin/rezervace/{$this->booking->id}/ukony", ['service' => 999999])->assertNotFound();
+
+        app(App\Services\Booking\Checkout::class)->save($this->booking, [], 550, PaymentMethod::Cash);
+
+        $this->post("/admin/rezervace/{$this->booking->id}/ukony", ['service' => $this->blow->id])
+            ->assertSessionHas('error', fn (string $error) => str_contains($error, 'zaplacená'));
+        $this->get("/admin/rezervace/{$this->booking->id}")->assertOk()->assertDontSee('Přidat úkon');
+
+        $cancelled = $this->manager->create($this->jana, [$this->cut], at('14:00'), $this->petra);
+        $this->manager->cancelByStaff($cancelled);
+        $this->post("/admin/rezervace/{$cancelled->id}/ukony", ['service' => $this->blow->id])->assertSessionHas('error');
+
+        expect($this->booking->fresh('items')->items)->toHaveCount(1)->and($cancelled->fresh('items')->items)->toHaveCount(1);
+    });
+
+    test('kadeřnice přidá úkon jen ke své rezervaci', function () {
+        $lucie = staffMember($this->salon, attributes: ['name' => 'Lucie', 'login' => 'lucie']);
+        $lucie->services()->attach([$this->cut->id, $this->blow->id]);
+        $hers = $this->manager->create(customer($this->salon), [$this->cut], at('13:00'), $lucie);
+
+        $this->actingAs($lucie);
+
+        $this->post("/admin/rezervace/{$hers->id}/ukony", ['service' => $this->blow->id])->assertSessionHas('status');
+        $this->post("/admin/rezervace/{$this->booking->id}/ukony", ['service' => $this->blow->id])->assertNotFound();
+        $this->get("/admin/rezervace/{$this->booking->id}/pripravky")->assertNotFound();
+        $this->post("/admin/rezervace/{$this->booking->id}/pripravky", ['products' => [['id' => $this->shampoo->id]]])->assertNotFound();
+
+        expect($hers->fresh('items')->items)->toHaveCount(2)
+            ->and($this->booking->fresh('items')->items)->toHaveCount(1)
+            ->and($this->booking->products()->count())->toBe(0);
+    });
+
+    test('přípravky se zapíšou samostatně bez platby a jdou upravit', function () {
+        $this->get("/admin/rezervace/{$this->booking->id}/pripravky")->assertOk()
+            ->assertSeeInOrder(['Přípravky', 'Jana Nováková', 'Barvy', 'Šampony', 'Uložit přípravky'])
+            ->assertDontSee('Zaplaceno');
+
+        $this->post("/admin/rezervace/{$this->booking->id}/pripravky", ['products' => [
+            ['id' => $this->majirel->id, 'note' => '7.1, 40 g'],
+            ['name' => 'Vlastní olej', 'note' => ''],
+        ]])->assertRedirect("/admin/rezervace/{$this->booking->id}")->assertSessionHas('status', 'Použité přípravky jsou uložené.');
+
+        $booking = $this->booking->fresh('products');
+
+        expect($booking->products->map(fn ($p) => [$p->product_id, $p->name, $p->note])->all())->toBe([
+            [$this->majirel->id, "L'Oréal Professionnel Majirel", '7.1, 40 g'],
+            [null, 'Vlastní olej', null],
+        ])->and($booking->isPaid())->toBeFalse()->and($booking->receipt_number)->toBeNull();
+
+        $this->get("/admin/rezervace/{$booking->id}")->assertOk()
+            ->assertSeeInOrder(['Přípravky', 'Majirel', '7.1, 40 g', 'Vlastní olej', 'Upravit přípravky', 'Vyúčtování', 'Zatím nezaplaceno']);
+
+        // Prázdný seznam přípravky smaže; zaplacení se tím nemění.
+        $this->post("/admin/rezervace/{$booking->id}/pripravky", ['products' => []])->assertSessionHas('status');
+        expect($booking->products()->count())->toBe(0);
+    });
+
+    test('nabídka přípravků jde vypsat ťuknutím na druh, bez psaní', function () {
+        $this->getJson('/admin/pripravky/hledat?druh=sampony')->assertOk()->assertJsonCount(2)
+            ->assertJsonPath('0.name', 'Kérastase Bain Satin');
+        $this->getJson('/admin/pripravky/hledat?druh=barvy')->assertOk()->assertJsonCount(1)->assertJsonPath('0.id', $this->majirel->id);
+        // Druh a hledání dohromady, neznámý druh se ignoruje.
+        $this->getJson('/admin/pripravky/hledat?druh=sampony&q=absolut')->assertOk()->assertJsonCount(1);
+        $this->getJson('/admin/pripravky/hledat?druh=nesmysl')->assertOk()->assertExactJson([]);
+    });
+});

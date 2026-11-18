@@ -22,7 +22,14 @@ Rozhodnutí z 16. 11. 2026:
 - Správce nemusí být kadeřnice (recepce, manažer): pak nemá sloupec v rozvrhu ani přehled „Dnes“
   a po přihlášení vidí rozvrh dne všech kadeřnic.
 - Kadeřnice může být v rozvrhu i bez vlastního přihlášení – rezervace jí pak zapisuje správce.
-  Přihlašovací jméno a heslo jí nastaví správce (Admin → Tým).
+  Přihlašovací jméno a heslo jí nastaví správce (Admin → Kadeřnice).
+
+Rozhodnutí z 18. 11. 2026:
+- **Kadeřnice vidí jen své.** Se svým jménem a heslem vidí jen svůj rozvrh, své rezervace a své
+  zákaznice (ty, které u ní mají rezervaci nebo ji mají jako svou kadeřnici) a nastavuje si jen svou
+  pracovní dobu a svůj ceník. Kolegyně, jejich rozvrh ani zákaznice nevidí a rezervaci ke kolegyni
+  nezapíše, nepřesune ani nepředá. **Celý salon vidí jen správce salonu – majitelka a recepce.**
+  Cizí záznam se kadeřnici tváří jako neexistující (404).
 - **Tým nejsou jen kadeřnice.** Každý člen týmu má nepovinné **zaměření** (kadeřnice, manikúra,
   pedikúra, kosmetika… – volný text) a **pořadí** sloupce v rozvrhu, které správce mění šipkami.
   Nový člen se řadí na konec. Kde má salon víc zaměření, dělí se podle nich rozvrh na skupiny
@@ -111,8 +118,8 @@ Stavy: `pending` (čeká na schválení) · `confirmed` · `cancelled_by_custome
 - **Dvě zákaznice najednou:** kadeřnice i správce smějí zapsat zákaznici i na obsazený čas nebo mimo
   pracovní dobu (pole „Jiný čas“ v průvodci, vždy s konkrétní kadeřnicí). Zákaznicím se takový čas
   nenabízí a samy si ho vynutit nemohou. Rozvrh souběžné rezervace kreslí vedle sebe.
-- **Předání jiné kadeřnici:** rezervace přejde ke kolegyni ve stejný čas (i když má plno, s upozorněním).
-  Zákaznici se neposílá oznámení – dá jí vědět kadeřnice.
+- **Předání jiné kadeřnici** (jen správce salonu): rezervace přejde ke kolegyni ve stejný čas
+  (i když má plno, s upozorněním). Zákaznici se neposílá oznámení – dá jí vědět salon.
 - **Přetažení v rozvrhu (drag and drop):** rezervaci jde myší přetáhnout na jiný čas, do sloupce jiné
   kadeřnice, v týdnu na jiný den. Prstem až po krátkém podržení (jinak by nešlo stránkou posouvat).
   Čas se zaokrouhluje na krok nabídky časů, u okraje okna se stránka sama posouvá. Po puštění se přesun
@@ -181,8 +188,9 @@ na telefonu je nabídka dole. Posouvá se vždy celá stránka, žádné vnitřn
 2. **Rozvrh** – po přihlášení se otevírá rovnou rozvrh. **Kadeřnice (kdo má vlastní sloupec) vidí
    svých sedm dní**: její „kurt“ rozložený do sedmi sloupců, první je vždy zvolený den (výchozí dnešek),
    šipky posouvají o týden, na telefonu se další dny posouvají prstem do strany. Stejně se zobrazí
-   kdokoliv po kliknutí na jeho jméno. Správce bez vlastního sloupce vidí **den celého salonu** se sloupcem
-   pro každého; kadeřnice se na něj přepne štítkem „Celý salon“ a zpět štítkem „Můj rozvrh“.
+   správci kdokoliv po kliknutí na jeho jméno. Správce vidí **den celého salonu** se sloupcem
+   pro každého (má-li i vlastní sloupec, přepíná štítky „Celý salon“ a „Můj rozvrh“); kadeřnice celý
+   salon ani kolegyně nevidí – ať si do adresy napíše cokoliv, dostane svých sedm dní.
    Den se šipkami, Dnes (u celého salonu i Zítra) a **ikona kalendáře** pro skok na libovolný den
    (třeba za měsíc) jsou **v horní liště** (místo názvu salonu). V panelu pod ní vlevo **měsíční kalendář** (skok na den, tečka = den s rezervacemi)
    a uprostřed **cedule salonu**: podsvícený nápis na stěně (vlastní nápis a podtitul z údajů salonu,
@@ -190,11 +198,17 @@ na telefonu je nabídka dole. Posouvá se vždy celá stránka, žádné vnitřn
    a štítky jsou v jednom řádku, aby byl rozvrh vidět hned. Pod tím mřížka:
    **sloupce = členové týmu** (jako kurty; pořadí určuje správce), řádky po půl hodině,
    v záhlaví jméno, zaměření a začátek a konec pracovní doby. Nad mřížkou **skupiny podle zaměření**
-   (Celý salon, Kadeřnice, Manikúra…) a výběr jednoho člověka; od osmi sloupců je záhlaví zhuštěné. Rezervace ukazuje čas a délku, jméno, telefon
-   a službu; barva podle stavu (potvrzená neonová, čeká hnědá, proběhlá nebo zaplacená ztlumená).
+   (Celý salon, Kadeřnice, Manikúra…) a výběr jednoho člověka. **Blok rezervace** (jako v rozvrhu
+   kurtů): nahoře pruh s časem a délkou a vpravo **telefon**, pod ním **jen příjmení** zákaznice
+   a vpravo dole **úkon** (služba); celé jméno je v popisku bloku a v detailu. Stav je barvou
+   (potvrzená neonová, čeká hnědá, proběhlá nebo zaplacená ztlumená) a značkou za časem (zaplaceno, čeká).
+   Co se do úzkého bloku nevejde, mizí v pořadí: ikony, délka, telefon.
    Kliknutí na místo = nová rezervace (i mimo pracovní dobu), tlačítko + u jména = další zákaznice,
-   přetažení = přesun. Záhlaví sloupců se na počítači drží pod horní lištou; na telefonu se víc sloupců
-   posouvá do strany. Sloupec může být i jiná služba než kadeřnice (např. modelace nehtů).
+   přetažení = přesun. **Sloupec má všude stejnou nejmenší šířku** (180 px, na telefonu 148 px = dva
+   sloupce): týden jedné kadeřnice i den celého salonu vypadají stejně. Co se do okna nevejde, posouvá
+   se do strany – šipkami v záhlaví, na telefonu prstem, při tažení rezervace k okraji samo; osa času
+   zůstává na místě. Svisle se posouvá celá stránka a záhlaví sloupců se drží pod horní lištou.
+   Sloupec může být i jiná služba než kadeřnice (např. modelace nehtů).
 3. **Ke schválení** – seznam pending s tlačítky Schválit / Zamítnout
 4. **Zákaznice** – hledání, karta: kontakty, historie návštěv včetně použitých přípravků,
    **receptura barvy**, poznámky, blokace, „Poslat odkaz“ (vygenerovat/sdílet token)
@@ -212,8 +226,10 @@ na telefonu je nabídka dole. Posouvá se vždy celá stránka, žádné vnitřn
    vlastní službu (dostane ji jen ona) a tu si i upravit; společné služby a pořadí upravuje owner,
    který také vidí a upraví ceník kterékoliv kadeřnice.
 9. **Pracovní doba a volno** – každá kadeřnice sobě, správce komukoliv
-10. **Tým** – seznam v pořadí sloupců rozvrhu (šipky), jméno, zaměření, přihlašovací jméno a heslo,
-    oprávnění, barva v rozvrhu (owner)
+10. **Kadeřnice** (owner) – seznam v pořadí sloupců rozvrhu (šipky). Stránka jedné kadeřnice má její
+    nastavení pohromadě: boxíky Rozvrh, Pracovní doba a volno, Ceník a pod nimi údaje (jméno, zaměření,
+    barva) a přihlášení (jméno, heslo, oprávnění: kadeřnice / správce salonu). Kadeřnice má po přihlášení
+    v Adminu jen „Moje nastavení“ (ceník, pracovní doba, heslo).
 11. **Nastavení** – pravidla z 4.3, údaje salonu a dokladu (provozovatel, IČO) (owner)
 12. **Můj účet** – vzhled (světlý / tmavý / podle zařízení), změna hesla, upozornění na tomto zařízení,
     odhlášení

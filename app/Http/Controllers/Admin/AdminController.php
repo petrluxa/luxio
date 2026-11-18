@@ -35,13 +35,38 @@ abstract class AdminController extends Controller
     }
 
     /**
-     * Kadeřnice salonu, ke kterým se lze objednat (pro přepínač v kalendáři).
+     * Koho přihlášený v administraci vidí: správce salonu (majitelka, recepce) všechny
+     * se sloupcem v rozvrhu, kadeřnice jen sebe – kolegyně, jejich rozvrh ani zákaznice nevidí.
      *
      * @return Collection<int, User>
      */
     protected function staffList(): Collection
     {
-        return $this->salon()->staff()->get();
+        $staff = $this->salon()->staff()->get();
+        $me = $this->user();
+
+        return $me->isOwner() ? $staff : $staff->where('id', $me->id)->values();
+    }
+
+    /**
+     * Člen týmu se sloupcem v rozvrhu podle čísla – jen z těch, které přihlášený vidí
+     * (kam smí rezervaci přesunout nebo přetáhnout).
+     */
+    protected function visibleStaff(int $id): ?User
+    {
+        $me = $this->user();
+
+        if (! $me->isOwner() && $id !== $me->id) {
+            return null;
+        }
+
+        return $this->salon()->staff()->whereKey($id)->first();
+    }
+
+    /** Na koho je omezený průvodce rezervací: kadeřnice zapisuje jen k sobě, správce ke komukoliv. */
+    protected function staffScope(): ?int
+    {
+        return $this->user()->isOwner() ? null : $this->user()->id;
     }
 
     /**
@@ -58,16 +83,20 @@ abstract class AdminController extends Controller
             ?? $this->user();
     }
 
+    /** Rezervace salonu; kadeřnici se cizí rezervace (u kolegyně) tváří jako neexistující. */
     protected function ownBooking(Booking $booking): Booking
     {
-        abort_unless($booking->salon_id === $this->user()->salon_id, 404);
+        $me = $this->user();
+
+        abort_unless($booking->salon_id === $me->salon_id && ($me->isOwner() || $booking->staff_id === $me->id), 404);
 
         return $booking;
     }
 
+    /** Zákaznice salonu; kadeřnice vidí jen své (viz Customer::scopeVisibleTo). */
     protected function ownCustomer(Customer $customer): Customer
     {
-        abort_unless($customer->salon_id === $this->user()->salon_id, 404);
+        abort_unless(Customer::query()->visibleTo($this->user())->whereKey($customer->id)->exists(), 404);
 
         return $customer;
     }

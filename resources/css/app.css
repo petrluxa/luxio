@@ -30,6 +30,7 @@
     --sign-sub: #3a322c;
     --sign-glow: 1;
     --cal-closed: #e6dccd; /* rozvrh mimo pracovní dobu */
+    --cal-done: #b5a999; /* proběhlá nebo zaplacená rezervace – plná, ale klidná barva */
     --sign-shadow: 0 1px 0 #e6dccd, 0 2px 0 #cfc2b0, 0 3px 0 #b7a895, 0 5px 4px rgb(58 40 22 / 0.35), 0 14px 22px rgb(58 40 22 / 0.32);
 }
 
@@ -55,6 +56,7 @@
         --sign-sub: #e6dccf;
         --sign-glow: 0;
         --cal-closed: #120f0c;
+        --cal-done: #62574c;
         --sign-shadow: 0 1px 0 #7d7166, 0 2px 0 #6b6057, 0 6px 10px rgb(20 12 6 / 0.45);
     }
 }
@@ -81,6 +83,7 @@
     --sign-sub: #e6dccf;
     --sign-glow: 0;
     --cal-closed: #120f0c;
+    --cal-done: #62574c;
     --sign-shadow: 0 1px 0 #7d7166, 0 2px 0 #6b6057, 0 6px 10px rgb(20 12 6 / 0.45);
 }
 
@@ -1207,69 +1210,130 @@
         }
     }
 
-    /* Mřížka rozvrhu. Na telefonu se víc sloupců posouvá do strany (osa času zůstává na místě),
-       na počítači se posouvá jen celá stránka a záhlaví sloupců se drží pod horní lištou. */
+    /* Mřížka rozvrhu. Sloupec má všude stejnou nejmenší šířku (--cal-min) – týden jedné kadeřnice i den
+       celého salonu vypadají stejně a bloky nejsou maličké. Co se do okna nevejde, posouvá se do strany
+       (osa času zůstává na místě); svisle se posouvá celá stránka. Záhlaví sloupců je zvlášť, drží se pod
+       horní lištou a do strany ho s mřížkou posouvá skript. */
+    .cal-frame {
+        --cal-time: 52px;
+        --cal-min: 148px; /* telefon: dva sloupce vedle sebe */
+    }
+
+    @media (min-width: 768px) {
+        .cal-frame {
+            --cal-min: 180px; /* sedm dní jedné kadeřnice se vejde do okna širokého 1360 px */
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .cal-frame {
+            --cal-time: 64px;
+        }
+    }
+
+    .cal-scroll,
+    .cal-headbar-scroll {
+        margin: 0 -18px;
+        padding: 0 18px;
+    }
+
     .cal-scroll {
         overflow-x: auto;
         overflow-y: hidden;
-        margin: 0 -18px;
-        padding: 0 18px;
         -webkit-overflow-scrolling: touch;
+    }
+
+    .cal-headbar {
+        position: sticky;
+        top: calc(var(--top-h) + env(safe-area-inset-top, 0px));
+        z-index: 6;
+    }
+
+    .cal-headbar-scroll {
+        overflow: hidden;
+    }
+
+    @media (min-width: 1024px) {
+        .cal-scroll,
+        .cal-headbar-scroll {
+            margin: 0;
+            padding: 0;
+        }
     }
 
     .cal {
         display: grid;
-        grid-template-columns: 52px repeat(var(--cal-cols, 1), minmax(132px, 1fr));
-        /* Úzký pruh vpravo od rezervací zůstává volný – kliknutím se přidá další zákaznice na stejný čas. */
-        --cal-gutter: 18px;
+        grid-template-columns: var(--cal-time) repeat(var(--cal-cols, 1), minmax(var(--cal-min), 1fr));
+        /* Obě mřížky (záhlaví i rozvrh) musí být stejně široké, proto šířka z počtu sloupců, ne z obsahu. */
+        min-width: calc(var(--cal-time) + var(--cal-cols, 1) * var(--cal-min));
     }
 
-    /* Jeden člověk rozložený do sedmi dnů: na telefonu jsou vidět první tři, další se posunou do strany. */
-    .cal-week {
-        grid-template-columns: 52px repeat(7, minmax(104px, 1fr));
-        --cal-gutter: 10px;
+    /* Na užší obrazovce sahá posuvný rámec až k okraji okna; sloupce, které odjely doleva, nesmí být
+       vidět v proužku před osou času. */
+    .cal-hours::before,
+    .cal-corner::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 100%;
+        bottom: 0;
+        width: 18px;
+        background: var(--bg);
     }
 
     @media (min-width: 1024px) {
-        .cal-scroll {
-            overflow: visible;
-            margin: 0;
-            padding: 0;
+        .cal-hours::before,
+        .cal-corner::before {
+            display: none;
         }
+    }
 
-        .cal {
-            grid-template-columns: 64px repeat(var(--cal-cols, 1), minmax(0, 1fr));
+    /* Šipky pro posun do strany (myší); ukážou se, jen když je kam posouvat. Na telefonu stačí prst. */
+    .cal-pan {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        z-index: 8;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        border: 0;
+        background: var(--primary);
+        color: var(--on-primary);
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .cal-pan-prev {
+        left: var(--cal-time);
+        border-radius: 0 10px 10px 0;
+    }
+
+    .cal-pan-next {
+        right: 0;
+        border-radius: 10px 14px 0 10px;
+    }
+
+    @media (hover: hover) and (min-width: 768px) {
+        .cal-pan {
+            display: flex;
         }
-
-        .cal-week {
-            grid-template-columns: 64px repeat(7, minmax(0, 1fr));
-        }
-
     }
 
     /* Záhlaví: pruh se jmény kadeřnic (v týdnu se dny) */
     .cal-corner,
     .cal-staff,
     .cal-head {
-        position: sticky;
-        /* Na telefonu se mřížka posouvá do strany ve vlastním rámci – tam záhlaví zůstává nahoře v něm.
-           Na počítači se drží pod horní lištou (viz níže). */
-        top: 0;
-        z-index: 6;
         min-height: 54px;
         background: var(--banner);
         color: var(--banner-text);
     }
 
-    @media (min-width: 1024px) {
-        .cal-corner,
-        .cal-staff,
-        .cal-head {
-            top: var(--top-h);
-        }
-    }
-
     .cal-corner {
+        position: sticky;
         left: 0;
         z-index: 7;
         display: flex;
@@ -1359,50 +1423,35 @@
         inset: -4px;
     }
 
-    /* Hodně sloupců (velký tým): užší záhlaví bez barevné tečky, ať je vidět celé jméno. */
-    .cal-dense .cal-staff {
-        gap: 4px;
-        padding: 6px 4px 6px 6px;
-    }
-
-    .cal-dense .cal-staff-dot {
-        display: none;
-    }
-
-    .cal-dense .cal-staff-name b {
-        font-size: 12px;
-        letter-spacing: 0.02em;
-    }
-
-    .cal-dense .cal-staff-name span {
-        font-size: 11px;
-    }
-
-    .cal-dense .cal-add {
-        width: 28px;
-        height: 28px;
-        border-radius: 9px;
-    }
-
-    .cal-dense .cal-block-head,
-    .cal-dense .cal-block b,
-    .cal-dense .cal-block-meta {
-        padding-right: 4px;
-        padding-left: 4px;
-    }
-
-    .cal-dense {
-        --cal-gutter: 10px;
-    }
-
     .cal-head {
         display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 6px 6px 8px;
+        border-left: 1px solid color-mix(in srgb, var(--banner-text) 22%, transparent);
+    }
+
+    .cal-head-day {
+        display: flex;
+        flex: 1 1 auto;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        border-left: 1px solid color-mix(in srgb, var(--banner-text) 22%, transparent);
+        min-width: 0;
+        color: inherit;
         line-height: 1.2;
         text-align: center;
+    }
+
+    .cal-head .cal-add {
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+    }
+
+    .cal-head.is-today .cal-add {
+        background: color-mix(in srgb, var(--on-primary) 14%, transparent);
+        color: var(--on-primary);
     }
 
     .cal-head b {
@@ -1487,12 +1536,33 @@
     }
 
     /* Rezervace. Vodorovnou polohu a šířku určuje šablona (pruhy při souběhu dvou zákaznic). */
-    .cal-block {
+    /* Blok: nahoře pruh s časem a vpravo telefon, pod ním příjmení, vpravo dole úkon. Co se do úzkého
+       bloku nevejde, mizí podle jeho skutečné šířky (souběh dvou zákaznic, telefon).
+       Rezervace je plný barevný kus přes celou šířku sloupce: práce, působení barvy i dokončení na sebe
+       navazují bez mezer; zaoblený je jen začátek a konec. Barva říká stav. */
+    .cal-block,
+    .cal-pause {
         position: absolute;
-        z-index: 2;
         overflow: hidden;
-        border-radius: 8px;
-        border-left: 4px solid var(--staff, var(--link));
+    }
+
+    .cal-block.is-first,
+    .cal-pause.is-first {
+        border-top-left-radius: 7px;
+        border-top-right-radius: 7px;
+    }
+
+    .cal-block.is-last,
+    .cal-pause.is-last {
+        border-bottom-right-radius: 7px;
+        border-bottom-left-radius: 7px;
+    }
+
+    .cal-block {
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        container-type: inline-size;
         background: var(--primary);
         color: var(--on-primary);
         font-size: 12px;
@@ -1506,8 +1576,15 @@
         cursor: grab;
     }
 
+    .cal-block svg {
+        flex: none;
+        stroke-width: 2.3;
+    }
+
     .cal-block-head {
         display: flex;
+        flex: none;
+        align-items: center;
         justify-content: space-between;
         gap: 6px;
         overflow: hidden;
@@ -1517,52 +1594,232 @@
         white-space: nowrap;
     }
 
-    .cal-block-head i {
+    .cal-block-time {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .cal-block-time > span {
+        flex: none;
+    }
+
+    /* Příjmení v záhlaví jen u nejnižšího bloku, kam se řádek se jménem nevejde. */
+    .cal-block-time > b {
+        display: none;
+        overflow: hidden;
+        font-weight: 700;
+        text-overflow: ellipsis;
+    }
+
+    .cal-block-state {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        gap: 3px;
         font-style: normal;
         font-weight: 400;
     }
 
-    .cal-block b {
-        display: block;
+    /* Telefon vpravo v záhlaví bloku. */
+    .cal-block-tag {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        gap: 3px;
+        padding: 0 5px;
+        border-radius: 5px;
+        background: color-mix(in srgb, #fff 50%, transparent);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .cal-block-body {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+        padding: 1px 6px 3px;
+    }
+
+    .cal-block-who {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .cal-block-who b {
         overflow: hidden;
-        padding: 1px 6px 0;
         font-size: 13px;
         font-weight: 700;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
 
-    .cal-block-meta {
-        display: block;
+    /* Úkon vpravo dole. */
+    .cal-block-what {
+        align-self: flex-end;
+        max-width: 100%;
+        margin-top: auto;
         overflow: hidden;
-        padding: 0 6px;
+        font-size: 11px;
+        line-height: 1.2;
         opacity: 0.85;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    .cal-block.is-short .cal-block-body {
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+        padding-bottom: 0;
+    }
+
+    .cal-block.is-short .cal-block-who {
+        flex: 0 1 auto;
+    }
+
+    .cal-block.is-short .cal-block-what {
+        flex: 1 1 0;
+        align-self: center;
+        margin-top: 0;
+        text-align: right;
+    }
+
+    .cal-block.is-tiny .cal-block-time > b {
+        display: block;
+    }
+
+    .cal-block.is-tiny .cal-block-dur,
+    .cal-block.is-tiny .cal-block-body {
+        display: none;
+    }
+
+    .cal-block-dur {
+        font-size: 11px;
+        font-weight: 400;
+    }
+
+    /* Slovo u značky stavu („zaplaceno“, „čeká“) jen v opravdu širokém bloku. */
+    @container (max-width: 249px) {
+        .cal-block-state span {
+            display: none;
+        }
+    }
+
+    @container (max-width: 199px) {
+        .cal-block-tag svg {
+            display: none;
+        }
+    }
+
+    /* Užší blok (týden jedné kadeřnice): telefon bez podkladu, aby se vešel vedle času a délky. */
+    @container (max-width: 179px) {
+        .cal-block-tag {
+            padding: 0;
+            background: none;
+            font-size: 10.5px;
+        }
+
+        .cal-block-head {
+            gap: 3px;
+        }
+
+        .cal-block-time {
+            gap: 4px;
+        }
+    }
+
+    /* Ještě užší: když se nevejde všechno, ustoupí délka (je vidět z výšky bloku) a zůstane telefon –
+       nejdřív u bloků se značkou stavu, pak u všech. */
+    @container (max-width: 163px) {
+        .cal-block-head:has(.cal-block-state) .cal-block-dur {
+            display: none;
+        }
+    }
+
+    @container (max-width: 147px) {
+        .cal-block-dur {
+            display: none;
+        }
+    }
+
+    @container (max-width: 139px) {
+        .cal-block-who svg {
+            display: none;
+        }
+    }
+
+    /* Jedenáct sloupců vedle sebe: všechno v záhlaví o chlup menší, ať se vejde čas, značka stavu i telefon. */
+    @container (max-width: 131px) {
+        .cal-block-head,
+        .cal-block-time {
+            gap: 2px;
+        }
+
+        .cal-block-state svg {
+            width: 10px;
+            height: 10px;
+        }
+
+        .cal-block-tag {
+            font-size: 10px;
+            letter-spacing: -0.2px;
+        }
+    }
+
+    /* Značka stavu (zaplaceno, čeká) má přednost před telefonem – ten je v detailu rezervace. */
+    @container (max-width: 113px) {
+        .cal-block-head:has(.cal-block-state) .cal-block-tag {
+            display: none;
+        }
+    }
+
+    /* Nejužší blok (dvě zákaznice vedle sebe, tři dny na telefonu): jen čas. */
+    @container (max-width: 103px) {
+        .cal-block-tag {
+            display: none;
+        }
+    }
+
+    @container (max-width: 59px) {
+        .cal-block-head,
+        .cal-block-body {
+            padding-right: 3px;
+            padding-left: 3px;
+        }
     }
 
     /* Čeká na schválení */
     .cal-block.is-pending {
         background: var(--banner);
         color: var(--banner-text);
-        border-left-style: dashed;
     }
 
     .cal-block.is-pending .cal-block-head {
         background: color-mix(in srgb, #fff 14%, var(--banner));
     }
 
+    .cal-block.is-pending .cal-block-tag {
+        background: color-mix(in srgb, #fff 16%, transparent);
+    }
+
     /* Proběhlá nebo zaplacená */
     .cal-block.is-done {
-        background: color-mix(in srgb, var(--muted) 24%, var(--card));
+        background: var(--cal-done);
         color: var(--text);
     }
 
     .cal-block.is-done .cal-block-head {
-        background: color-mix(in srgb, var(--muted) 38%, var(--card));
+        background: color-mix(in srgb, var(--card) 34%, var(--cal-done));
     }
 
-    .cal-block.is-no-show {
+    .cal-block.is-no-show,
+    .cal-pause.is-no-show {
         opacity: 0.55;
         text-decoration: line-through;
     }
@@ -1574,12 +1831,12 @@
     /* Obrys přetahované rezervace na novém místě */
     .cal-ghost {
         position: absolute;
-        right: var(--cal-gutter);
+        right: 2px;
         left: 2px;
         z-index: 5;
         overflow: hidden;
         padding: 2px 6px;
-        border-radius: 8px;
+        border-radius: 7px;
         border: 2px dashed var(--link);
         background: color-mix(in srgb, var(--primary) 60%, transparent);
         color: var(--on-primary);
@@ -1589,24 +1846,27 @@
         pointer-events: none;
     }
 
+    /* Působí barva: stejný kus rezervace ve světlejším odstínu. Kadeřnice má volné ruce – ťuknutím do něj
+       zapíše další zákaznici, a ta se pak kreslí přes něj. */
     .cal-pause {
-        position: absolute;
         z-index: 1;
-        overflow: hidden;
         padding: 2px 6px;
-        border-radius: 8px;
-        border: 1px dashed var(--link);
-        color: var(--muted);
-        font-size: 12px;
+        background: color-mix(in srgb, var(--primary) 52%, var(--card));
+        color: var(--on-primary);
+        font-size: 11px;
+        line-height: 1.3;
+        white-space: nowrap;
         pointer-events: none;
     }
 
-    .cal-buffer {
-        position: absolute;
-        z-index: 1;
-        border-radius: 4px;
-        background: color-mix(in srgb, var(--muted) 22%, transparent);
-        pointer-events: none;
+    .cal-pause.is-pending {
+        background: color-mix(in srgb, var(--banner) 82%, var(--card));
+        color: var(--banner-text);
+    }
+
+    .cal-pause.is-done {
+        background: color-mix(in srgb, var(--cal-done) 62%, var(--card));
+        color: var(--text);
     }
 
     .cal-now {

@@ -45,14 +45,45 @@
         </p>
     @endif
 
-    {{-- Služby a čas --}}
-    <div class="card mt-3">
+    {{-- Úkony a čas. Další úkon jde přidat, když si zákaznice při návštěvě řekne o něco navíc. --}}
+    <h2 class="section-title">Úkony</h2>
+    <div class="card" x-data>
         @foreach ($booking->items as $item)
-            <div class="flex items-baseline justify-between gap-3 @if (! $loop->first) mt-2 @endif">
-                <b class="font-semibold">{{ $item->name }}</b>
+            <div class="flex items-center justify-between gap-3 @if (! $loop->first) mt-2 @endif">
+                <b class="min-w-0 flex-1 font-semibold">{{ $item->name }}</b>
                 <span class="whitespace-nowrap text-muted">{{ Cz::price($item->price, $item->price_to) }}</span>
+                @if ($editable && $booking->items->count() > 1)
+                    <form method="post" action="{{ route('admin.bookings.items.destroy', [$booking, $item]) }}" class="flex-none">
+                        @csrf
+                        <button class="btn btn-quiet btn-sm" type="submit" aria-label="Odebrat úkon {{ $item->name }}">Odebrat</button>
+                    </form>
+                @endif
             </div>
         @endforeach
+
+        @if ($editable && $addable->isNotEmpty())
+            <button type="button" class="btn btn-outline btn-block mt-3" x-on:click="$refs.ukony.showModal()">
+                @include('partials.icon', ['name' => 'plus', 'size' => 18]) Přidat úkon
+            </button>
+
+            <dialog class="sheet" x-ref="ukony" x-on:click="if ($event.target === $el) $el.close()">
+                <b class="block text-[18px] font-semibold">Přidat úkon</b>
+                <p class="label mb-3">Návštěva se o něj prodlouží a cena se sečte.</p>
+                <form method="post" action="{{ route('admin.bookings.items.store', $booking) }}">
+                    @csrf
+                    @foreach ($addable as $option)
+                        <button class="row mb-2 w-full text-left" type="submit" name="service" value="{{ $option['id'] }}">
+                            <span class="row-main">
+                                <b>{{ $option['service']->name }}</b>
+                                <span>{{ Cz::duration($option['service']->totalMinutes()) }} · {{ Cz::price($option['service']->priceFrom, $option['service']->priceTo) }}</span>
+                            </span>
+                            @include('partials.icon', ['name' => 'plus', 'size' => 20, 'class' => 'text-muted'])
+                        </button>
+                    @endforeach
+                </form>
+                <button type="button" class="btn btn-quiet btn-block" x-on:click="$refs.ukony.close()">Zavřít</button>
+            </dialog>
+        @endif
 
         <dl class="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t border-line pt-3">
             <dt class="text-muted">Čas</dt>
@@ -75,19 +106,28 @@
         @endif
     </div>
 
-    {{-- Vyúčtování: použité přípravky, platba a doklad --}}
+    {{-- Přípravky, které kadeřnice zákaznici použila – zapisují se zvlášť, platba až potom. --}}
     @unless ($booking->status->isCancelled() || $booking->status === BookingStatus::NoShow)
-        <h2 class="section-title">Vyúčtování</h2>
+        <h2 class="section-title">Přípravky</h2>
         <div class="card">
             @if ($booking->products->isNotEmpty())
-                <span class="label">Použité přípravky</span>
-                <ul class="mb-3 mt-1">
+                <ul>
                     @foreach ($booking->products as $item)
                         <li>{{ $item->label() }}</li>
                     @endforeach
                 </ul>
+            @else
+                <p class="text-muted">Zatím nic zapsaného.</p>
             @endif
 
+            <a class="btn btn-outline btn-block mt-3" href="{{ route('admin.bookings.products', $booking) }}">
+                @include('partials.icon', ['name' => 'bottle', 'size' => 18]) {{ $booking->products->isEmpty() ? 'Zapsat přípravky' : 'Upravit přípravky' }}
+            </a>
+        </div>
+
+        {{-- Vyúčtování: platba a doklad --}}
+        <h2 class="section-title">Vyúčtování</h2>
+        <div class="card">
             @if ($booking->isPaid())
                 @php
                     $receiptUrl = $booking->receiptUrl();
@@ -123,7 +163,7 @@
                     <button class="btn btn-quiet btn-sm btn-block" type="submit" x-text="sure ? 'Opravdu zrušit zaplacení?' : 'Zrušit zaplacení'">Zrušit zaplacení</button>
                 </form>
             @else
-                <p class="text-muted">{{ $booking->products->isEmpty() ? 'Zatím nevyúčtováno.' : 'Zatím nezaplaceno.' }}</p>
+                <p class="text-muted">Zatím nezaplaceno. K zaplacení {{ $booking->priceLabel() }}.</p>
                 <a class="btn btn-primary btn-block mt-3" href="{{ route('admin.bookings.checkout', $booking) }}">Vyúčtovat</a>
             @endif
         </div>

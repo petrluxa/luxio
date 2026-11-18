@@ -12,9 +12,11 @@ use App\Events\BookingRejected;
 use App\Exceptions\BookingActionException;
 use App\Exceptions\SlotUnavailableException;
 use App\Models\Booking;
+use App\Models\BookingItem;
 use App\Models\Customer;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\Availability\EffectiveService;
 use App\Services\Availability\ServicePlan;
 use App\Services\Availability\SlotFinder;
 use Carbon\CarbonImmutable;
@@ -216,6 +218,95 @@ final class BookingManager
         if (! $previousStart->equalTo($start)) {
             BookingMoved::dispatch($booking, $previousStart, false);
         }
+    }
+
+    /**
+     * Přidá k rezervaci další úkon – zákaznice si při návštěvě řekla o něco navíc. Délka a cena jsou
+     * z ceníku kadeřnice, rezervace se o úkon prodlouží. Projde i přes další zákaznici nebo konec
+     * pracovní doby (kadeřnice to má před sebou v rozvrhu); návratová hodnota na to upozorní.
+     *
+     * @return bool zasahuje teď rezervace do jiné nebo mimo pracovní dobu?
+     */
+    public function addService(Booking $booking, Service $service): bool
+    {
+        $this->assertItemsEditable($booking);
+
+        $staff = $booking->staff->loadMissing('services');
+
+        if ($service->salon_id !== $booking->salon_id || ! $service->is_active || ! $staff->services->contains('id', $service->id)) {
+            throw new BookingActionException('Tento úkon '.$staff->name.' v ceníku nemá.');
+        }
+
+        return DB::transaction(function () use ($booking, $service, $staff) {
+            $this->lockStaff([$booking->staff_id]);
+
+            $effective = EffectiveService::for($service, $staff);
+
+            $booking->items()->create([
+                'service_id' => $effective->serviceId,
+                'name' => $effective->name,
+                'price' => $effective->priceFrom,
+                'price_to' => $effective->priceTo,
+                'work_1' => $effective->work1,
+                'pause' => $effective->pause,
+                'work_2' => $effective->work2,
+                'buffer_after' => $effective->bufferAfter,
+                'sequence' => (int) $booking->items()->max('sequence') + 1,
+            ]);
+
+            return $this->replan($booking);
+        });
+    }
+
+    /** Odebere úkon z rezervace (omyl, zákaznice si to rozmyslela). Poslední úkon odebrat nejde. */
+    public function removeItem(Booking $booking, BookingItem $item): void
+    {
+        $this->assertItemsEditable($booking);
+
+        if ($item->booking_id !== $booking->id) {
+            throw new BookingActionException('Tento úkon k rezervaci nepatří.');
+        }
+
+        if ($booking->items()->count() <= 1) {
+            throw new BookingActionException('Rezervace musí mít aspoň jeden úkon. Chcete-li ji celou zrušit, použijte Zrušit rezervaci.');
+        }
+
+        DB::transaction(function () use ($booking, $item) {
+            $this->lockStaff([$booking->staff_id]);
+            $item->delete();
+            $this->replan($booking);
+        });
+    }
+
+    private function assertItemsEditable(Booking $booking): void
+    {
+        if ($booking->status->isCancelled() || $booking->status === BookingStatus::NoShow) {
+            throw new BookingActionException('U zrušené rezervace už úkony měnit nejde.');
+        }
+
+        if ($booking->isPaid()) {
+            throw new BookingActionException('Návštěva je už zaplacená. Zrušte nejdřív zaplacení, potom úkony upravte.');
+        }
+    }
+
+    /**
+     * Přepočítá konec, cenu a úseky rezervace podle jejích úkonů (začátek zůstává).
+     *
+     * @return bool zasahuje teď rezervace do jiné nebo mimo pracovní dobu?
+     */
+    private function replan(Booking $booking): bool
+    {
+        $booking->load('items');
+        $plan = $booking->plan();
+
+        $booking->update([
+            'ends_at' => $plan->endsAt($booking->starts_at),
+            'total_price' => $plan->totalPrice(),
+        ]);
+
+        $this->writeSegments($booking, $plan);
+
+        return ! $this->slots->isFree($booking->salon, $booking->staff, $plan, $booking->starts_at, true, $booking->id);
     }
 
     /**

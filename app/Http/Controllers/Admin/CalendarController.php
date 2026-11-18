@@ -118,6 +118,8 @@ class CalendarController extends AdminController
             // (bez toho by se kadeřnici po každém kliknutí vrátil její týden).
             'who' => $picked ? (string) $picked->id : ($me->is_bookable && ! $group ? 'vse' : null),
             'me' => $me,
+            // Celý salon (ostatní sloupce, skupiny) vidí jen správce – majitelka a recepce.
+            'wholeSalon' => $me->isOwner(),
             'mini' => $this->miniCalendar($request, $date, $members->modelKeys()),
             'slotStep' => $this->salon()->rules()->slotStep,
         ]);

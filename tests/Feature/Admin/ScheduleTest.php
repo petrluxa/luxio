@@ -1,9 +1,11 @@
 <?php
 
 use App\Enums\BookingNotice;
+use App\Enums\BookingStatus;
 use App\Enums\UserRole;
 use App\Events\BookingMoved;
 use App\Models\Booking;
+use App\Models\Customer;
 use App\Models\Salon;
 use App\Notifications\BookingNotification;
 use App\Services\Availability\SlotFinder;
@@ -19,7 +21,8 @@ use Illuminate\Support\Facades\Notification;
 
 beforeEach(function () {
     $this->travelTo(TEST_NOW);
-    $this->salon = Salon::factory()->create();
+    // Pevný název: náhodný („Kadeřnictví Šárka“) by občas rozbil kontroly, že kadeřnice kolegyni nevidí.
+    $this->salon = Salon::factory()->create(['name' => 'Salon U Zrcadla', 'slug' => 'salon-u-zrcadla']);
     $this->manager = app(BookingManager::class);
 
     // Správce bez vlastních zákaznic a dvě kadeřnice (po–pá 9–12 a 13–17).
@@ -29,7 +32,8 @@ beforeEach(function () {
 
     $this->cut = service($this->salon, [], $this->sabina, $this->sarka);
     $this->jana = customer($this->salon, ['name' => 'Jana Nováková', 'phone' => '+420603123456']);
-    $this->eva = customer($this->salon, ['name' => 'Eva Malá', 'phone' => '+420777111222']);
+    // Eva chodí k Sabině – kadeřnice vidí a objednává jen své zákaznice.
+    $this->eva = customer($this->salon, ['name' => 'Eva Malá', 'phone' => '+420777111222', 'preferred_staff_id' => $this->sabina->id]);
 });
 
 describe('rozvrh dne', function () {
@@ -43,7 +47,7 @@ describe('rozvrh dne', function () {
         $this->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()
             ->assertSee('--cal-cols: 2', false)
             ->assertSeeInOrder(['Sabina', '9:00–17:00', 'Šárka', '9:00–17:00'])
-            ->assertSee('10:00 (45m)')
+            ->assertSeeText('10:00 (45m)')
             ->assertSee('Jana Nováková')
             ->assertSee('603 123 456')
             // Den se šipkami v horní liště, název salonu na ceduli a měsíční kalendář vedle rozvrhu.
@@ -91,19 +95,66 @@ describe('rozvrh dne', function () {
             ->assertSee('type="date"', false);
     });
 
-    test('kadeřnice se přepne na celý salon a zpět na svůj rozvrh', function () {
+    test('blok v rozvrhu: nahoře čas a telefon, pod tím jen příjmení a vpravo dole úkon', function () {
+        $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->sabina);
+
+        $this->actingAs($this->spravce)->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()
+            ->assertSeeInOrder([
+                'cal-block-head', '10:00', '(45m)', 'cal-block-tag', '603 123 456',
+                'cal-block-who', '<b>Nováková</b>', 'cal-block-what', e($this->cut->name),
+            ], false)
+            // Celé jméno zůstává v popisku (najetí myší, čtečka, potvrzení přesunu), v bloku je jen příjmení.
+            ->assertSee('title="Jana Nováková · 603 123 456 · '.e($this->cut->name).'"', false)
+            ->assertDontSee('<b>Jana Nováková</b>', false);
+    });
+
+    test('příjmení pro blok v rozvrhu', function (string $name, string $surname) {
+        expect((new Customer(['name' => $name]))->surname())->toBe($surname);
+    })->with([
+        ['Klára Konečná', 'Konečná'],
+        ['Jana', 'Jana'],
+        ['Marie Anna Nováková', 'Nováková'],
+        ['Jan Novák ml.', 'Novák ml.'],
+        ['  Eva   Malá ', 'Malá'],
+        ['Ing. Petra Veselá', 'Veselá'],
+    ]);
+
+    test('kadeřnice vidí jen svůj rozvrh – celý salon ani kolegyni si neotevře', function () {
+        $this->manager->create(customer($this->salon, ['name' => 'Cizí Zákaznice']), [$this->cut], at('10:00'), $this->sarka);
+
         $this->actingAs($this->sabina);
 
+        // Ať si do adresy napíše cokoliv, dostane svých sedm dní.
+        foreach (['kadernice=vse', "kadernice={$this->sarka->id}", 'obor=kadeřnice'] as $query) {
+            $this->get("/admin/kalendar?{$query}&datum=".TEST_DAY)->assertOk()
+                ->assertSee('--cal-cols: 7', false)
+                ->assertSeeInOrder(['top-day', 'Sabina'], false)
+                ->assertDontSee('Šárka')
+                ->assertDontSee('Cizí Zákaznice')
+                ->assertDontSee('Celý salon')
+                ->assertDontSee('Můj rozvrh')
+                ->assertDontSee('kadernice=vse', false);
+        }
+
+        $this->get('/admin/dnes')->assertOk()->assertSee('Můj den')->assertDontSee('Šárka');
+    });
+
+    test('správce, který má i vlastní sloupec, se přepíná mezi svým rozvrhem a celým salonem', function () {
+        $this->spravce->update(['is_bookable' => true]);
+        $this->spravce->services()->attach($this->cut->id);
+
+        $this->actingAs($this->spravce);
+
+        $this->get('/admin/kalendar?datum='.TEST_DAY)->assertOk()->assertSee('--cal-cols: 7', false)->assertSee('Celý salon');
+
         $this->get('/admin/kalendar?kadernice=vse&datum='.TEST_DAY)->assertOk()
-            ->assertSee('--cal-cols: 2', false)->assertSee('Šárka')
+            ->assertSee('--cal-cols: 3', false)->assertSee('Šárka')
             ->assertSee('Můj rozvrh')
-            // Odkazy si „celý salon“ nesou dál, jinak by ji další den vrátil k jejímu týdnu.
+            // Odkazy si „celý salon“ nesou dál, jinak by ho další den vrátil k jeho týdnu.
             ->assertSee('kadernice=vse', false);
 
         $this->get("/admin/kalendar?kadernice={$this->sarka->id}&datum=".TEST_DAY)->assertOk()
             ->assertSee('--cal-cols: 7', false)->assertSee('Šárka ×')->assertSee('Můj rozvrh');
-
-        $this->get('/admin/dnes')->assertOk()->assertSee('Můj den');
     });
 
     test('den, kdy kadeřnice nepracuje, má v záhlaví „volno“ a svátek „svátek“', function () {
@@ -370,7 +421,12 @@ describe('přetažení rezervace v rozvrhu', function () {
         Event::fake([BookingMoved::class]);
         $booking = $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->sabina);
 
+        // Kadeřnice kolegyni nevidí, takže k ní ani nepřetáhne; mezi sloupci přesouvá správce.
         $this->actingAs($this->sabina)->postJson("/admin/rezervace/{$booking->id}/pretazeni", ['staff' => $this->sarka->id, 'date' => TEST_DAY, 'time' => '13:30'])
+            ->assertStatus(422);
+        expect($booking->fresh()->staff_id)->toBe($this->sabina->id);
+
+        $this->actingAs($this->spravce)->postJson("/admin/rezervace/{$booking->id}/pretazeni", ['staff' => $this->sarka->id, 'date' => TEST_DAY, 'time' => '13:30'])
             ->assertOk()->assertJsonPath('ok', true)->assertJsonPath('overlap', false);
 
         $booking->refresh();
@@ -416,7 +472,7 @@ describe('přetažení rezervace v rozvrhu', function () {
         $booking = $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->sabina);
         $jina = $this->manager->create(customer($cizi), [service($cizi)], at('10:00'), $ciziKadernice);
 
-        $this->actingAs($this->sabina);
+        $this->actingAs($this->spravce);
         $drop = fn (array $data, $target = null) => $this->postJson('/admin/rezervace/'.($target ?? $booking)->id.'/pretazeni', $data + ['staff' => $this->sarka->id, 'date' => TEST_DAY, 'time' => '13:00']);
 
         $drop(['staff' => $ciziKadernice->id])->assertStatus(422);
@@ -517,5 +573,130 @@ describe('předání jiné kadeřnici', function () {
         $this->post("/admin/rezervace/{$booking->id}/kadernice", ['kadernice' => $this->spravce->id])->assertSessionHasErrors('kadernice');
 
         expect($booking->fresh()->staff_id)->toBe($this->sabina->id);
+    });
+});
+
+describe('kadeřnice vidí jen své', function () {
+    beforeEach(function () {
+        // Jana chodí k Sabině, Olga k Šárce.
+        $this->mine = $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->sabina);
+        $this->olga = customer($this->salon, ['name' => 'Olga Cizí', 'phone' => '+420608555444']);
+        $this->theirs = $this->manager->create($this->olga, [$this->cut], at('13:00'), $this->sarka);
+    });
+
+    test('rezervaci kolegyně neotevře ani nezmění', function () {
+        $this->actingAs($this->sabina);
+
+        $this->get("/admin/rezervace/{$this->mine->id}")->assertOk()->assertDontSee('Předat jiné kadeřnici');
+        $this->get("/admin/rezervace/{$this->theirs->id}")->assertNotFound();
+        $this->get("/admin/rezervace/{$this->theirs->id}/presun")->assertNotFound();
+        $this->get("/admin/rezervace/{$this->theirs->id}/vyuctovani")->assertNotFound();
+
+        foreach (['zrusit', 'neprisla', 'probehla', 'poznamka', 'schvalit', 'zamitnout'] as $action) {
+            $this->post("/admin/rezervace/{$this->theirs->id}/{$action}", ['staff_note' => 'x', 'reason' => 'x']);
+        }
+
+        $this->post("/admin/rezervace/{$this->theirs->id}/presun", ['date' => TEST_DAY, 'time' => '15:00'])->assertNotFound();
+        $this->post("/admin/rezervace/{$this->theirs->id}/vyuctovani", ['amount' => 500])->assertNotFound();
+        $this->postJson("/admin/rezervace/{$this->theirs->id}/pretazeni", ['staff' => $this->sabina->id, 'date' => TEST_DAY, 'time' => '15:00'])->assertNotFound();
+
+        $theirs = $this->theirs->fresh();
+
+        expect($theirs->status)->toBe(BookingStatus::Confirmed)
+            ->and($theirs->staff_id)->toBe($this->sarka->id)
+            ->and($theirs->starts_at)->toEqual(at('13:00'))
+            ->and($theirs->staff_note)->toBeNull()
+            ->and($theirs->paid_at)->toBeNull();
+    });
+
+    test('svou rezervaci kolegyni nepředá – mezi kadeřnicemi přesouvá jen správce', function () {
+        $this->actingAs($this->sabina);
+
+        $this->post("/admin/rezervace/{$this->mine->id}/kadernice", ['kadernice' => $this->sarka->id])->assertForbidden();
+
+        // Přesun s podstrčenou kolegyní zůstane v jejím rozvrhu.
+        $this->post("/admin/rezervace/{$this->mine->id}/presun", ['staff' => $this->sarka->id, 'date' => TEST_DAY, 'time' => '14:00'])
+            ->assertSessionHas('status');
+
+        expect($this->mine->fresh()->staff_id)->toBe($this->sabina->id)
+            ->and($this->mine->fresh()->starts_at)->toEqual(at('14:00'));
+    });
+
+    test('novou rezervaci zapíše jen k sobě a jen své zákaznici', function () {
+        $this->actingAs($this->sabina);
+
+        // Průvodce jí kolegyni nenabídne.
+        $this->get('/admin/rezervace/nova')->assertOk()->assertSee('Sabina')->assertDontSee('Šárka');
+
+        $this->post('/admin/rezervace', ['customer_id' => $this->eva->id, 'services' => [$this->cut->id], 'staff' => $this->sarka->id, 'date' => TEST_DAY, 'time' => '15:00'])
+            ->assertRedirect();
+
+        expect(Booking::query()->latest('id')->first()->staff_id)->toBe($this->sabina->id);
+
+        // Zákaznici kolegyně si z její karty objednat nemůže – nevidí ji.
+        $this->post('/admin/rezervace', ['customer_id' => $this->olga->id, 'services' => [$this->cut->id], 'date' => TEST_DAY, 'time' => '16:00'])
+            ->assertNotFound();
+
+        expect(Booking::count())->toBe(3);
+    });
+
+    test('v zákaznicích vidí jen své a novou si přidá k sobě', function () {
+        $this->actingAs($this->sabina);
+
+        $this->get('/admin/zakaznice')->assertOk()->assertSee('Jana Nováková')->assertSee('Eva Malá')->assertDontSee('Olga Cizí');
+        $this->getJson('/admin/zakaznice/hledat?q=Olga')->assertOk()->assertExactJson([]);
+        $this->getJson('/admin/zakaznice/hledat?q=Jana')->assertOk()->assertJsonCount(1);
+        $this->get("/admin/zakaznice/{$this->olga->id}")->assertNotFound();
+        $this->post("/admin/zakaznice/{$this->olga->id}", ['name' => 'Přepsaná'])->assertNotFound();
+        $this->post("/admin/zakaznice/{$this->olga->id}/odkaz")->assertNotFound();
+        $this->post("/admin/zakaznice/{$this->olga->id}/blokace")->assertNotFound();
+
+        expect($this->olga->fresh()->name)->toBe('Olga Cizí')->and($this->olga->fresh()->is_blocked)->toBeFalse();
+
+        // Novou zákaznici si přidá k sobě – jinak by ji po uložení sama neviděla.
+        $this->post('/admin/zakaznice', ['name' => 'Nová Moje', 'phone' => '777888999'])->assertRedirect();
+        $new = Customer::query()->where('name', 'Nová Moje')->sole();
+
+        expect($new->preferred_staff_id)->toBe($this->sabina->id);
+        $this->get("/admin/zakaznice/{$new->id}")->assertOk();
+
+        // Úpravou karty si ji nepřepíše ke kolegyni a neztratí.
+        $this->post("/admin/zakaznice/{$new->id}", ['name' => 'Nová Moje', 'preferred_staff_id' => ''])->assertSessionHas('status');
+        expect($new->fresh()->preferred_staff_id)->toBe($this->sabina->id);
+
+        // Společná zákaznice: v její kartě jsou jen návštěvy u ní.
+        $this->manager->create($this->jana, [$this->cut], at('15:00'), $this->sarka);
+        $this->get("/admin/zakaznice/{$this->jana->id}")->assertOk()->assertSee('10:00')->assertDontSee('15:00')->assertDontSee('Šárka');
+    });
+
+    test('správce vidí všechny zákaznice a rezervace', function () {
+        $this->actingAs($this->spravce);
+
+        $this->get('/admin/zakaznice')->assertOk()->assertSee('Olga Cizí')->assertSee('Jana Nováková');
+        $this->get("/admin/zakaznice/{$this->olga->id}")->assertOk();
+        $this->get("/admin/rezervace/{$this->theirs->id}")->assertOk()->assertSee('Předat jiné kadeřnici');
+    });
+
+    test('kadeřnice má v Adminu jen své nastavení, správce seznam kadeřnic a u každé její nastavení', function () {
+        $this->actingAs($this->sabina);
+
+        $this->get('/admin/vice')->assertOk()
+            ->assertSeeInOrder(['Můj rozvrh', 'Moje zákaznice', 'Moje nastavení', 'Můj ceník', 'Moje pracovní doba a volno', 'Heslo a upozornění'])
+            ->assertDontSee('Údaje salonu')
+            ->assertDontSee('Pravidla rezervací');
+        $this->get('/admin/kadernice')->assertForbidden();
+        $this->get("/admin/kadernice/{$this->sabina->id}")->assertForbidden();
+        $this->get('/admin/nastaveni')->assertForbidden();
+
+        $this->actingAs($this->spravce);
+
+        $this->get('/admin/vice')->assertOk()->assertSeeInOrder(['Salon', 'Kadeřnice', 'Údaje salonu a doklad']);
+        $this->get('/admin/kadernice')->assertOk()
+            ->assertSeeInOrder(['Sabina', 'přihlašuje se jako sabina', 'vidí jen svůj rozvrh', 'Šárka', 'Petr', 'správce – vidí celý salon']);
+        $this->get("/admin/kadernice/{$this->sabina->id}")->assertOk()
+            ->assertSee('kalendar?kadernice='.$this->sabina->id, false)
+            ->assertSee('pracovni-doba?kadernice='.$this->sabina->id, false)
+            ->assertSee('sluzby?kadernice='.$this->sabina->id, false)
+            ->assertSeeInOrder(['Rozvrh', 'Pracovní doba a volno', 'Ceník', 'Údaje a přihlášení', 'Přihlašovací jméno']);
     });
 });

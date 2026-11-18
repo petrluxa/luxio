@@ -36,6 +36,12 @@ Route::prefix('rezervace')->name('bookings.')->group(function () {
     Route::post('/{booking}/kadernice', [BookingController::class, 'reassign'])->name('reassign');
     Route::post('/{booking}/pretazeni', [BookingController::class, 'drop'])->name('drop');
 
+    // Úkony navíc a použité přípravky přímo z detailu rezervace
+    Route::post('/{booking}/ukony', [BookingController::class, 'addItem'])->name('items.store');
+    Route::post('/{booking}/ukony/{item}/odebrat', [BookingController::class, 'removeItem'])->name('items.destroy');
+    Route::get('/{booking}/pripravky', [BookingController::class, 'productsForm'])->name('products');
+    Route::post('/{booking}/pripravky', [BookingController::class, 'products'])->name('products.store');
+
     // Vyúčtování: použité přípravky, částka, doklad
     Route::get('/{booking}/vyuctovani', [BookingController::class, 'checkoutForm'])->name('checkout');
     Route::post('/{booking}/vyuctovani', [BookingController::class, 'checkout'])->name('checkout.store');

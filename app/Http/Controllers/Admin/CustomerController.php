@@ -53,7 +53,14 @@ class CustomerController extends AdminController
 
     public function store(Request $request): RedirectResponse
     {
-        $customer = Customer::create($this->validated($request) + [
+        $data = $this->validated($request);
+
+        // Zákaznice, kterou si přidala kadeřnice, je její – jinak by ji po uložení sama neviděla.
+        if (! $this->user()->isOwner()) {
+            $data['preferred_staff_id'] = $this->user()->id;
+        }
+
+        $customer = Customer::create($data + [
             'salon_id' => $this->salon()->id,
             'is_verified' => true, // přidala ji kadeřnice
         ]);
@@ -69,7 +76,10 @@ class CustomerController extends AdminController
             'tab' => 'customers',
             'customer' => $customer,
             'staffList' => $this->staffList(),
-            'bookings' => $customer->bookings()->with('items', 'staff', 'products')->orderByDesc('starts_at')->limit(60)->get(),
+            // Kadeřnice vidí jen návštěvy u sebe, správce celou historii v salonu.
+            'bookings' => $customer->bookings()
+                ->when(! $this->user()->isOwner(), fn ($query) => $query->where('staff_id', $this->user()->id))
+                ->with('items', 'staff', 'products')->orderByDesc('starts_at')->limit(60)->get(),
             'activeTokens' => $customer->accessTokens()->whereNull('revoked_at')->count(),
             // Čerstvě vydaný odkaz se ukáže jen jednou – nikde není uložený.
             'link' => session('link'),
@@ -78,7 +88,14 @@ class CustomerController extends AdminController
 
     public function update(Request $request, Customer $customer): RedirectResponse
     {
-        $this->ownCustomer($customer)->update($this->validated($request));
+        $data = $this->validated($request);
+
+        // Komu zákaznice patří, mění jen správce (kadeřnice to pole ve formuláři nemá).
+        if (! $this->user()->isOwner()) {
+            unset($data['preferred_staff_id']);
+        }
+
+        $this->ownCustomer($customer)->update($data);
 
         return back()->with('status', 'Uloženo.');
     }
@@ -128,7 +145,7 @@ class CustomerController extends AdminController
         $phone = preg_replace('/\D/', '', $q);
 
         return Customer::query()
-            ->where('salon_id', $this->salon()->id)
+            ->visibleTo($this->user())
             ->when($q !== '', fn (Builder $query) => $query->where(function (Builder $w) use ($q, $phone) {
                 $w->where('name', 'like', "%{$q}%");
 
