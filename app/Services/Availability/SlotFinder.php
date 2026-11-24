@@ -139,6 +139,98 @@ final class SlotFinder
     }
 
     /**
+     * Přehled pro rozvrh, který vidí zákaznice (den celého salonu nebo týden jedné kadeřnice).
+     * Rozvrh má řádky po půl hodině a každé pole pracovní doby je buď volné (`starts` – od tohoto
+     * času se vejde aspoň jedna služba), nebo obsazené (`taken` – je tam jiná zákaznice, nebo mezera,
+     * do které se nevejde nic). Čas, který už nejde stihnout, a čas za nejzazším dnem objednání
+     * není ani jedno – je zavřený.
+     *
+     * Přesný začátek po kroku salonu si zákaznice doladí až po výběru služby. Všechno se počítá
+     * z jednoho načtení pracovní doby a obsazenosti.
+     *
+     * @param  \Illuminate\Support\Collection<int, User>  $staff  s načtenými službami
+     * @return array<int, array<string, array{open: list<TimeRange>, starts: list<int>, taken: list<int>}>>
+     *                                                                                                        [id][Y-m-d], časy = minuty od půlnoci
+     */
+    public function overview(Salon $salon, Collection $staff, CarbonImmutable $from, int $days = 1): array
+    {
+        $from = $from->startOfDay();
+        $to = $from->addDays(max(1, $days) - 1);
+        $staffIds = $staff->modelKeys();
+
+        if ($staffIds === []) {
+            return [];
+        }
+
+        $rules = $salon->rules();
+        $now = CarbonImmutable::now();
+        $earliest = $now->addHours($rules->minNoticeHours);
+        $latest = $now->startOfDay()->addDays($rules->maxDaysAhead)->endOfDay();
+
+        $workingTime = WorkingTime::load($this->holidays, $staffIds, $from, $to);
+        $occupancy = Occupancy::load($staffIds, $from, $to);
+        $overview = [];
+
+        foreach ($staff as $member) {
+            $plans = $member->services
+                ->where('is_active', true)
+                ->map(fn (Service $service) => ServicePlan::for([$service], $member))
+                ->filter(fn (ServicePlan $plan) => $plan->serviceMinutes() > 0)
+                ->sortBy(fn (ServicePlan $plan) => $plan->serviceMinutes())
+                ->values();
+
+            for ($day = $from; $day <= $to; $day = $day->addDay()) {
+                $open = $workingTime->openIntervals($member->id, $day);
+                $starts = [];
+                $taken = [];
+
+                foreach ($open as $interval) {
+                    for ($start = $this->alignToStep($interval->start, 30); $start < $interval->end; $start = $start->addMinutes(30)) {
+                        if ($start < $earliest || $start > $latest) {
+                            continue;
+                        }
+
+                        // Stačí, že se od tohoto času vejde aspoň jedna služba (zkouší se od nejkratší).
+                        $fits = $plans->contains(fn (ServicePlan $plan) => $plan->endsAt($start) <= $interval->end
+                            && ! $occupancy->collides($member->id, $plan->blockingRangesAt($start)));
+
+                        if ($fits) {
+                            $starts[] = $start->hour * 60 + $start->minute;
+                        } else {
+                            $taken[] = $start->hour * 60 + $start->minute;
+                        }
+                    }
+                }
+
+                $overview[$member->id][$day->toDateString()] = ['open' => $open, 'starts' => $starts, 'taken' => $taken];
+            }
+        }
+
+        return $overview;
+    }
+
+    /**
+     * Dny, kdy aspoň jedna z kadeřnic pracuje (pro měsíční kalendář zákaznice: zavřené dny jsou ztlumené).
+     *
+     * @param  list<int>  $staffIds
+     * @return array<string, bool> klíč `Y-m-d`
+     */
+    public function openDays(array $staffIds, CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $from = $from->startOfDay();
+        $to = $to->startOfDay();
+        $workingTime = $staffIds ? WorkingTime::load($this->holidays, $staffIds, $from, $to) : null;
+        $days = [];
+
+        for ($day = $from; $day <= $to; $day = $day->addDay()) {
+            $days[$day->toDateString()] = $workingTime !== null
+                && collect($staffIds)->contains(fn (int $id) => $workingTime->openIntervals($id, $day) !== []);
+        }
+
+        return $days;
+    }
+
+    /**
      * Je konkrétní začátek u konkrétní kadeřnice volný? Používá se při ukládání
      * rezervace (znovu ověřit v transakci) a při přesunu termínu.
      *

@@ -3,6 +3,15 @@
 <section x-data="{
             picked: @js(($preselected ?? null) ? ['id' => $preselected->id, 'name' => $preselected->name, 'phone' => Cz::phone($preselected->phone)] : null),
             q: @js(old('customer_name', '')),
+            phone: @js(old('customer_phone', '')),
+            phoneTouched: @js($errors->has('customer_phone')),
+            {{-- Telefon nové zákaznice je povinný: 9 číslic, nebo číslo s předvolbou (+421…, 00421…). --}}
+            get phoneOk() {
+                const digits = this.phone.replace(/\D/g, '');
+                const international = /^\s*(\+|00)/.test(this.phone);
+
+                return international ? digits.length >= 9 && digits.length <= 17 : digits.length === 9;
+            },
             results: [],
             searched: false,
             async search() {
@@ -42,8 +51,13 @@
         <div x-show="q.trim().length >= 2" x-cloak>
             <p class="label mb-2" x-show="searched && results.length === 0">V databázi není – založí se nová zákaznice.</p>
             <label class="field">
-                <span>Telefon nové zákaznice (nepovinné)</span>
-                <input class="input" type="tel" name="customer_phone" value="{{ old('customer_phone') }}" inputmode="tel" autocomplete="off" placeholder="603 123 456">
+                <span>Telefon nové zákaznice (povinné)</span>
+                <input class="input" type="tel" name="customer_phone" x-model="phone" x-on:blur="phoneTouched = true" :required="!picked"
+                       :aria-invalid="(phoneTouched || phone !== '') && !phoneOk" aria-describedby="customer-phone-error"
+                       inputmode="tel" autocomplete="off" placeholder="603 123 456">
+                {{-- Hláška hned při psaní, ne až po odeslání; vyplněné údaje při chybě zůstávají. --}}
+                <div class="field-error" id="customer-phone-error" x-show="(phoneTouched || phone !== '') && !phoneOk" x-cloak
+                     x-text="phone.trim() === '' ? 'Telefon je povinný – bez něj zákaznici nedohledáte ani jí nezavoláte.' : 'Telefon má mít 9 číslic (nebo předvolbu, např. +421…).'"></div>
             </label>
         </div>
     </div>

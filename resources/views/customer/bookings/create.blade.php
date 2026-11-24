@@ -4,7 +4,13 @@
 @section('title', $replaces ? 'Přesun termínu' : 'Nová rezervace')
 
 @section('content')
-    <a class="back-link" href="{{ $replaces ? route('customer.booking.show', $replaces) : route('customer.home') }}">Zpět</a>
+    {{-- Na novou rezervaci se stálá zákaznice dostane i rovnou z odkazu salonu – „Zpět“ by tam nedávalo
+         smysl, proto odkaz říká, kam vede. --}}
+    @if ($replaces)
+        <a class="back-link" href="{{ route('customer.booking.show', $replaces) }}">‹ Zpět na termín</a>
+    @else
+        <a class="back-link" href="{{ route('customer.home') }}">‹ Můj účet a termíny</a>
+    @endif
     <h1 class="screen-title">{{ $replaces ? 'Přesun termínu' : 'Nová rezervace' }}</h1>
 
     @if ($customer->is_blocked)

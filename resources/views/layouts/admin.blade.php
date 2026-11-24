@@ -79,6 +79,21 @@
 
     <main class="admin-main mx-auto w-full {{ $width }} px-[18px] pt-4">
         @include('partials.flash', ['sticky' => true])
+
+        {{-- Upozornění se zapínají pro každé zařízení zvlášť; kdo je tady nemá, o nové rezervaci se nedozví. --}}
+        @if ($tab !== 'account')
+            <div class="push-nudge" x-data="pushNudge" x-show="show" x-cloak role="status">
+                @include('partials.icon', ['name' => 'bell', 'size' => 20])
+                <p>
+                    <b>Na tomto zařízení nemáte zapnutá upozornění.</b>
+                    <span x-show="!needsInstall">O nové rezervaci se tu nedozvíte, dokud je nezapnete.</span>
+                    <span x-show="needsInstall">Na iPhonu si nejdřív přidejte aplikaci na plochu – postup je v účtu.</span>
+                </p>
+                <a class="btn btn-primary btn-sm" href="{{ route('admin.account') }}#upozorneni">Zapnout</a>
+                <button type="button" class="btn btn-quiet btn-sm" x-on:click="later()">Teď ne</button>
+            </div>
+        @endif
+
         @yield('content')
     </main>
 

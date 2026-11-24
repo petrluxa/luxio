@@ -219,6 +219,28 @@ describe('rezervace', function () {
         expect(Booking::count())->toBe(0);
     });
 
+    test('nová zákaznice musí mít telefon; vyplněné údaje při chybě zůstanou', function () {
+        $form = ['services' => [$this->cut->id], 'staff' => $this->petra->id, 'date' => TEST_DAY, 'time' => '10:00', 'customer_name' => 'Eva Malá'];
+
+        foreach ([[], ['customer_phone' => ''], ['customer_phone' => '12345'], ['customer_phone' => 'nemá']] as $phone) {
+            $this->actingAs($this->petra)->from('/admin/rezervace/nova')->post('/admin/rezervace', $form + $phone)
+                ->assertRedirect('/admin/rezervace/nova')
+                ->assertSessionHasErrors(['customer_phone' => 'Zadejte telefon nové zákaznice – 9 číslic.'])
+                ->assertSessionHasInput('customer_name', 'Eva Malá');
+        }
+
+        expect(Booking::count())->toBe(0)->and(Customer::where('name', 'Eva Malá')->count())->toBe(0);
+
+        // Stávající zákaznice (i bez telefonu) se vybírá ze seznamu – tam se telefon nevyžaduje.
+        $this->jana->update(['phone' => null]);
+        $this->actingAs($this->petra)->post('/admin/rezervace', ['customer_id' => $this->jana->id] + $form)->assertSessionDoesntHaveErrors();
+
+        expect(Booking::sole()->customer_id)->toBe($this->jana->id);
+
+        // Formulář pole označuje jako povinné.
+        $this->get('/admin/rezervace/nova')->assertOk()->assertSee('Telefon nové zákaznice (povinné)')->assertDontSee('(nepovinné)');
+    });
+
     test('nabídka termínů pro přesun počítá s délkou rezervace a ignoruje ji samotnou', function () {
         $booking = bookingAt($this, '10:00');
 

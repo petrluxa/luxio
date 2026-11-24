@@ -21,8 +21,11 @@ Route::get('/offline', [PwaController::class, 'offline'])->middleware('backgroun
 Route::prefix('s/{salon}')->name('salon.')->group(function () {
     Route::get('/', [PublicBookingController::class, 'create'])->name('show');
     Route::get('/terminy', [PublicBookingController::class, 'slots'])->middleware(['throttle:slots', 'background'])->name('slots');
+    Route::get('/rozvrh', [PublicBookingController::class, 'board'])->middleware(['throttle:slots', 'background'])->name('board');
+    Route::get('/rozvrh/mesic', [PublicBookingController::class, 'month'])->middleware(['throttle:slots', 'background'])->name('board.month');
     Route::post('/', [PublicBookingController::class, 'store'])->middleware('throttle:6,1')->name('store');
     Route::get('/odeslano', [PublicBookingController::class, 'sent'])->name('sent');
+    Route::post('/odhlasit', [PublicBookingController::class, 'forget'])->name('forget');
 });
 
 /*
@@ -35,10 +38,14 @@ Route::prefix('k/{token}')->name('customer.')->middleware('customer.token')->gro
     // a aplikace se na ně po odeslání formuláře nevrací).
     Route::middleware(['throttle:slots', 'background'])->group(function () {
         Route::get('/rezervace/terminy', [Customer\BookingController::class, 'slots'])->name('booking.slots');
+        Route::get('/rezervace/rozvrh', [Customer\BookingController::class, 'board'])->name('booking.board');
+        Route::get('/rezervace/rozvrh/mesic', [Customer\BookingController::class, 'month'])->name('booking.board.month');
         Route::get('/manifest.webmanifest', [PwaController::class, 'customerManifest'])->name('manifest');
         Route::post('/push', [PushSubscriptionController::class, 'store'])->name('push.store');
         Route::delete('/push', [PushSubscriptionController::class, 'destroy'])->name('push.destroy');
     });
+
+    Route::post('/push/zkouska', [PushSubscriptionController::class, 'test'])->middleware(['throttle:6,1', 'background'])->name('push.test');
 
     Route::middleware('throttle:customer-link')->group(function () {
         Route::get('/', Customer\HomeController::class)->name('home');
@@ -92,6 +99,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
         Route::post('/push', [PushSubscriptionController::class, 'store'])->name('push.store');
         Route::delete('/push', [PushSubscriptionController::class, 'destroy'])->name('push.destroy');
+        Route::post('/push/zkouska', [PushSubscriptionController::class, 'test'])->middleware('throttle:6,1')->name('push.test');
 
         require __DIR__.'/admin.php';
     });

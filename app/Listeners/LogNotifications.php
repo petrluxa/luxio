@@ -7,6 +7,7 @@ use App\Notifications\BookingNotification;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Notifications\Events\NotificationFailed;
 use Illuminate\Notifications\Events\NotificationSent;
+use Minishlink\WebPush\MessageSentReport;
 
 /**
  * Zápis odeslaných (a neodeslaných) upozornění do tabulky `notification_log`.
@@ -15,7 +16,26 @@ class LogNotifications
 {
     public function onSent(NotificationSent $event): void
     {
-        $this->log($event->notifiable, $event->notification, $event->channel, null);
+        $this->log($event->notifiable, $event->notification, $event->channel, $this->refusal($event->response));
+    }
+
+    /**
+     * „Odesláno“ znamená, že upozornění přijala služba aspoň jednoho zařízení (Apple, Google, Microsoft).
+     * Když ho odmítly všechny, je to chyba – i když samotné odeslání proběhlo bez výjimky.
+     */
+    private function refusal(mixed $response): ?string
+    {
+        $reports = collect(is_array($response) ? $response : [])->filter(fn ($report) => $report instanceof MessageSentReport);
+
+        if ($reports->isEmpty() || $reports->contains(fn (MessageSentReport $report) => $report->isSuccess())) {
+            return null;
+        }
+
+        $first = $reports->first();
+
+        return 'Služba upozornění zprávu odmítla'
+            .($first->getResponse() ? ' (kód '.$first->getResponse()->getStatusCode().')' : '')
+            .': '.preg_replace('#https?://\S+#', '…', $first->getReason());
     }
 
     public function onFailed(NotificationFailed $event): void

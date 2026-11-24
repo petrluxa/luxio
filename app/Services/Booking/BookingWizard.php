@@ -23,6 +23,9 @@ final class BookingWizard
 {
     public const WINDOW_DAYS = 14;
 
+    /** Kolik dní jedné kadeřnice ukazuje rozvrh pro zákaznice. */
+    public const BOARD_WEEK = 7;
+
     public function __construct(private readonly SlotFinder $slots) {}
 
     /**
@@ -64,6 +67,7 @@ final class BookingWizard
                 'id' => $u->id,
                 'name' => $u->name,
                 'label' => $u->name.($mixed && $u->positionKey() ? ' · '.trim($u->position) : ''),
+                'position' => $mixed && $u->positionKey() ? trim($u->position) : '',
             ])->all(),
             'services' => $services->all(),
             'staffHeading' => $mixed ? 'Ke komu' : 'Kadeřnice',
@@ -127,6 +131,142 @@ final class BookingWizard
             'days' => $days,
             'summary' => $this->summary($services, $staff),
         ];
+    }
+
+    /**
+     * Rozvrh pro zákaznici. Bez vybrané kadeřnice je to jeden den celého salonu (sloupec = člověk),
+     * s vybranou kadeřnicí jejích sedm dní (sloupec = den). U každého sloupce je pracovní doba,
+     * půlhodiny, od kterých se dá objednat (`starts`), a půlhodiny, které jsou obsazené (`taken` –
+     * bez jmen, bez služeb a bez toho, kolik rezervací v nich je). Časy jsou v minutách od půlnoci.
+     *
+     * @param  int|null  $scopeStaffId  token omezený na jednu kadeřnici
+     * @param  int|null  $staffId  kadeřnice, jejíž týden se má ukázat
+     * @return array<string, mixed>
+     */
+    public function board(Salon $salon, ?string $date = null, ?int $scopeStaffId = null, ?int $staffId = null): array
+    {
+        $today = CarbonImmutable::today();
+        $lastDay = $today->addDays($salon->rules()->maxDaysAhead);
+        $day = ($this->parseDate($date) ?? $today)->max($today)->min($lastDay);
+
+        $staff = $salon->staff()->with('services')->get()
+            ->when($scopeStaffId, fn (Collection $all) => $all->where('id', $scopeStaffId))
+            ->values();
+
+        $member = $staffId ? $staff->firstWhere('id', $staffId) : null;
+        $step = $member ? self::BOARD_WEEK : 1;
+        $days = (int) min($step, $day->diffInDays($lastDay) + 1);
+        $shown = $member ? $staff->where('id', $member->id)->values() : $staff;
+
+        $overview = $this->slots->overview($salon, $shown, $day, $days);
+        $pairs = fn (array $ranges, CarbonImmutable $base) => array_map(
+            fn ($range) => [max(0, (int) $base->diffInMinutes($range->start)), min(24 * 60, (int) $base->diffInMinutes($range->end))],
+            $ranges,
+        );
+
+        $column = function (User $who, CarbonImmutable $date) use ($overview, $pairs, $today, $member) {
+            $cell = $overview[$who->id][$date->toDateString()];
+            $open = $pairs($cell['open'], $date);
+
+            return [
+                'key' => $who->id.'-'.$date->toDateString(),
+                'staffId' => $who->id,
+                'date' => $date->toDateString(),
+                'short' => Cz::date($date),
+                'today' => $date->equalTo($today),
+                // Den celého salonu: jméno a zaměření. Týden: den a pracovní doba.
+                'title' => $member
+                    ? ($date->equalTo($today) ? 'Dnes' : mb_convert_case(Cz::dayShort($date), MB_CASE_TITLE)).' '.$date->day.'. '.$date->month.'.'
+                    : $who->name,
+                'subtitle' => $member
+                    ? ($open ? $this->clock(min(array_column($open, 0))).'–'.$this->clock(max(array_column($open, 1))) : 'zavřeno')
+                    : trim((string) $who->position),
+                'open' => $open,
+                'starts' => $cell['starts'],
+                'taken' => $cell['taken'],
+            ];
+        };
+
+        $columns = $member
+            ? collect(range(0, $days - 1))->map(fn (int $i) => $column($member, $day->addDays($i)))->all()
+            : $staff->map(fn (User $who) => $column($who, $day))->all();
+
+        // Osa času: od první otevírací hodiny po poslední zavírací (celé hodiny); když je všude zavřeno, 9–17.
+        $opens = $columns ? array_merge(...array_column($columns, 'open')) : [];
+        $from = $opens ? intdiv(min(array_column($opens, 0)), 60) * 60 : 9 * 60;
+        $to = $opens ? (int) ceil(max(array_column($opens, 1)) / 60) * 60 : 17 * 60;
+        $last = $day->addDays($days - 1);
+
+        return [
+            'mode' => $member ? 'week' : 'day',
+            'staffId' => $member?->id,
+            'date' => $day->toDateString(),
+            'label' => $member ? Cz::date($day).' – '.Cz::date($last) : Cz::dateLong($day),
+            'isToday' => $day->equalTo($today),
+            'isTomorrow' => ! $member && $day->equalTo($today->addDay()),
+            'today' => $today->toDateString(),
+            'tomorrow' => ! $member && $today->addDay() <= $lastDay ? $today->addDay()->toDateString() : null,
+            'prev' => $day > $today ? $day->subDays($step)->max($today)->toDateString() : null,
+            'next' => $day->addDays($step) <= $lastDay ? $day->addDays($step)->toDateString() : null,
+            'max' => $lastDay->toDateString(),
+            'from' => $from,
+            'to' => $to,
+            'closed' => $opens === [],
+            'columns' => $columns,
+        ];
+    }
+
+    /**
+     * Měsíc pro kalendář, kterým zákaznice skáče na jiný den: celé týdny od pondělí, u každého dne,
+     * jestli se na něj dá skočit (dnešek až nejzazší den objednání) a jestli salon – nebo vybraná
+     * kadeřnice – ten den pracuje.
+     *
+     * @param  string|null  $month  `Y-m`
+     * @return array<string, mixed>
+     */
+    public function month(Salon $salon, ?string $month = null, ?int $scopeStaffId = null, ?int $staffId = null): array
+    {
+        $today = CarbonImmutable::today();
+        $lastDay = $today->addDays($salon->rules()->maxDaysAhead);
+        $first = ($this->parseDate($month ? $month.'-01' : null) ?? $today)->startOfMonth()
+            ->max($today->startOfMonth())
+            ->min($lastDay->startOfMonth());
+
+        $staffIds = $salon->staff()->pluck('id')
+            ->when($scopeStaffId, fn (Collection $ids) => $ids->intersect([$scopeStaffId]))
+            ->when($staffId, fn (Collection $ids) => $ids->contains($staffId) ? $ids->intersect([$staffId]) : $ids)
+            ->values()->all();
+
+        $from = $first->startOfWeek(CarbonImmutable::MONDAY);
+        $to = $first->endOfMonth()->endOfWeek(CarbonImmutable::SUNDAY)->startOfDay();
+        $open = $this->slots->openDays($staffIds, $from, $to);
+        $days = [];
+
+        for ($day = $from; $day <= $to; $day = $day->addDay()) {
+            $days[] = [
+                'date' => $day->toDateString(),
+                'day' => $day->day,
+                'label' => Cz::dateLong($day),
+                'inMonth' => $day->month === $first->month,
+                'enabled' => $day >= $today && $day <= $lastDay,
+                'open' => $open[$day->toDateString()],
+                'today' => $day->equalTo($today),
+            ];
+        }
+
+        return [
+            'month' => $first->format('Y-m'),
+            'label' => mb_convert_case(Cz::monthYear($first), MB_CASE_TITLE),
+            'prev' => $first > $today->startOfMonth() ? $first->subMonth()->format('Y-m') : null,
+            'next' => $first->addMonth() <= $lastDay ? $first->addMonth()->format('Y-m') : null,
+            'days' => $days,
+        ];
+    }
+
+    /** Minuty od půlnoci → 9:00. */
+    private function clock(int $minute): string
+    {
+        return intdiv($minute, 60).':'.str_pad((string) ($minute % 60), 2, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -223,6 +363,7 @@ final class BookingWizard
 
         return [
             'duration' => Cz::duration($plan->serviceMinutes()),
+            'minutes' => $plan->serviceMinutes(),
             'price' => ($hasRange ? 'od ' : '').Cz::money($plan->totalPrice()),
         ];
     }

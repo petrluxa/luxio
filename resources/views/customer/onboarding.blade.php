@@ -24,7 +24,7 @@
 
     <p class="mb-3 text-muted">Příště se objednáte na pár ťuknutí a připomínka termínu vám přijde rovnou na telefon. Bez hesla, bez SMS.</p>
 
-    @include('partials.install-steps', ['pushConfig' => ['vapidKey' => $vapidPublicKey, 'subscribeUrl' => route('customer.push.store')]])
+    @include('partials.install-steps', ['pushConfig' => ['vapidKey' => $vapidPublicKey, 'subscribeUrl' => route('customer.push.store'), 'testUrl' => route('customer.push.test')]])
 
     {{-- Osobní odkaz k uložení: e-mailem ho neposíláme, zákaznice si ho schová sama. --}}
     <section class="card mt-2" x-data="{

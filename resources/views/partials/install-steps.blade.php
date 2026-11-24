@@ -1,12 +1,12 @@
 {{--
     Onboarding: 1) přidat aplikaci na plochu, 2) povolit upozornění.
-    Vstup: $pushConfig = ['vapidKey' => …, 'subscribeUrl' => …]
+    Vstup: $pushConfig = ['vapidKey' => …, 'subscribeUrl' => …, 'testUrl' => …]
 --}}
 <div x-data="pushSetup(@js($pushConfig))">
     {{-- 1. Přidat na plochu --}}
     <section class="card">
         <div class="flex items-center gap-3">
-            <span class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-selected font-semibold text-banner-text">1</span>
+            <span class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-selected font-semibold text-ink">1</span>
             <b class="text-[16px] font-semibold">Přidat na plochu</b>
             <span class="tag ml-auto" x-show="standalone" x-cloak>Hotovo</span>
         </div>
@@ -72,7 +72,7 @@
     {{-- 2. Upozornění --}}
     <section class="card mt-2">
         <div class="flex items-center gap-3">
-            <span class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-selected font-semibold text-banner-text">2</span>
+            <span class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-selected font-semibold text-ink">2</span>
             <b class="text-[16px] font-semibold">Povolit upozornění</b>
             <span class="tag ml-auto" x-show="subscribed" x-cloak>Zapnuto</span>
         </div>
@@ -125,12 +125,38 @@
                     </p>
                 </div>
 
+                {{-- Zapnuto: zkouška, že upozornění na toto zařízení opravdu dorazí. --}}
+                <div x-show="subscribed" x-cloak>
+                    <button type="button" class="btn btn-outline btn-block mt-3" x-on:click="sendTest()" :disabled="testing || busy"
+                            x-text="testing ? 'Posílám…' : 'Poslat zkušební upozornění'"></button>
+
+                    <div class="banner mt-3 font-normal" x-show="testResult === 'sent'" x-cloak role="status">
+                        <b class="font-semibold">Odesláno.</b> Do pár vteřin má na tomto zařízení vyskočit „Zkušební upozornění“.
+                        <span x-show="platform !== 'desktop'">
+                            Když do půl minuty nepřijde, podívejte se v telefonu, jestli nemáte zapnutý režim Nerušit
+                            (Soustředění) a jestli má tato aplikace v nastavení telefonu oznámení povolená.
+                        </span>
+                        <span x-show="platform === 'desktop'">
+                            Když do půl minuty nepřijde, podívejte se, jestli nemáte v počítači zapnutý režim Nerušit
+                            a jestli má prohlížeč v nastavení počítače oznámení povolená.
+                        </span>
+                    </div>
+
+                    <p class="banner banner-danger mt-3 font-normal" x-show="testResult === 'failed' && !error" x-cloak role="alert">
+                        Zkušební upozornění se nepodařilo odeslat. Zkuste to prosím za chvíli znovu; když to nepůjde ani
+                        potom, vypněte upozornění tlačítkem níže a zapněte je znovu.
+                    </p>
+                </div>
+
                 <button type="button" class="btn btn-quiet btn-sm btn-block mt-3" x-show="subscribed" x-on:click="disable()" :disabled="busy">
                     Vypnout na tomto zařízení
                 </button>
             </div>
         </div>
 
-        <p class="field-error" x-show="error" x-text="error" role="alert"></p>
+        <p class="field-error" x-show="error" x-text="error" x-cloak role="alert"></p>
+
+        {{-- Doslovná chyba od telefonu nebo serveru – kdo si neví rady, pošle ji dál. --}}
+        <p class="mt-2 break-words text-[13px] text-muted" x-show="detail" x-cloak>Podrobnost: <span x-text="detail"></span></p>
     </section>
 </div>

@@ -67,8 +67,13 @@ class BookingController extends CustomerController
         return view('customer.bookings.create', [
             'replaces' => $replaces,
             'next' => $customer->nextBooking(),
+            // Nová rezervace u salonu s víc lidmi začíná rozvrhem celého salonu; přesun termínu
+            // a zákaznice vázaná na jednu kadeřnici vybírají jen den a čas.
+            'wide' => ! $replaces && count($options['staff']) > 1,
             'wizard' => $options + [
                 'slotsUrl' => route('customer.booking.slots'),
+                'boardUrl' => ! $replaces && count($options['staff']) > 1 ? route('customer.booking.board') : null,
+                'monthUrl' => route('customer.booking.board.month'),
                 'replaces' => $replaces?->id,
                 'selected' => [
                     'staffId' => $request->old('staff') !== null ? ((int) $request->old('staff') ?: null) : $preferred,
@@ -81,6 +86,28 @@ class BookingController extends CustomerController
                 ],
             ],
         ]);
+    }
+
+    /** Rozvrh: den celého salonu, nebo týden jedné kadeřnice (?kadernice=) – bez jmen ostatních zákaznic. */
+    public function board(Request $request): JsonResponse
+    {
+        return response()->json($this->wizard->board(
+            $this->customer($request)->salon,
+            $request->query('den'),
+            $this->accessToken($request)->scope_staff_id,
+            $request->integer('kadernice') ?: null,
+        ));
+    }
+
+    /** Měsíc pro kalendář „Jiný den“: na které dny jde skočit a kdy salon (kadeřnice) pracuje. */
+    public function month(Request $request): JsonResponse
+    {
+        return response()->json($this->wizard->month(
+            $this->customer($request)->salon,
+            $request->query('mesic'),
+            $this->accessToken($request)->scope_staff_id,
+            $request->integer('kadernice') ?: null,
+        ));
     }
 
     public function slots(Request $request): JsonResponse

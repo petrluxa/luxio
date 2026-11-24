@@ -13,12 +13,25 @@
             @if ($salon->phone) Zavolejte prosím na {{ Cz::phone($salon->phone) }}. @endif
         </div>
     @else
+        {{-- Zákaznice, kterou si prohlížeč pamatuje: stejná stránka, jen bez jména a telefonu. --}}
+        @if ($known)
+            <div class="pub-known">
+                <span>Rezervujete jako <b>{{ $known->name }}</b></span>
+                <a href="{{ route('customer.home', $own) }}">Můj účet a termíny</a>
+                {{-- Odhlášení: prohlížeč zákaznici zapomene a stránka se ukáže jako komukoliv novému. --}}
+                <form method="post" action="{{ route('salon.forget', $salon) }}">
+                    @csrf
+                    <button type="submit">Odhlásit</button>
+                </form>
+            </div>
+        @endif
+
         @include('partials.booking-wizard', [
-            'action' => route('salon.store', $salon),
+            'action' => $known ? route('customer.booking.store', $own) : route('salon.store', $salon),
             'replaces' => null,
-            'withContact' => true,
-            'secondaryUrl' => route('recover', ['salon' => $salon->slug]),
-            'secondaryLabel' => 'Už mám účet',
+            'withContact' => ! $known,
+            'secondaryUrl' => $known ? route('customer.bookings', $own) : route('recover', ['salon' => $salon->slug]),
+            'secondaryLabel' => $known ? 'Moje termíny' : 'Už mám účet',
             'submitLabel' => 'Rezervovat',
         ])
     @endif

@@ -11,9 +11,18 @@
  *   fixed:    true = služby jsou dané (přesun termínu v administraci), vybírá se jen den a čas,
  *   anyTime:  true = administrace: jde zadat i čas mimo volné termíny (kadeřnice dělá dvě
  *             zákaznice najednou nebo pracuje mimo svou dobu); formulář pak pošle force=1,
- *   selected: { staffId, serviceIds, date, time }   – předvýběr / návrat po chybě
+ *   selected: { staffId, serviceIds, date, time },  – předvýběr / návrat po chybě
+ *   boardUrl: adresa rozvrhu dne celého salonu | null
  * }
+ *
+ * S `boardUrl` (zákaznice u salonu s víc lidmi) začíná průvodce rozvrhem: sloupec pro každou
+ * kadeřnici, volné a obsazené časy. Ťuknutím na volný čas vybere zákaznice kadeřnici, den i čas
+ * najednou a potom teprve službu; chipy s kadeřnicemi a dny se neukazují.
  */
+
+/** Minuty od půlnoci → 9:30 (stejný zápis, jaký vrací nabídka termínů). */
+const clock = (minute) => `${Math.floor(minute / 60)}:${String(minute % 60).padStart(2, '0')}`;
+
 export default (config) => ({
     staff: config.staff,
     services: config.services,
@@ -41,21 +50,287 @@ export default (config) => ({
     submitting: false,
     requestNo: 0,
 
+    // Rozvrh dne celého salonu (jen s config.boardUrl).
+    boardOn: Boolean(config.boardUrl) && config.staff.length > 1,
+    board: null,
+    boardLoading: false,
+    boardFailed: false,
+    boardRequestNo: 0,
+    boardStaffId: null, // čí týden se ukazuje; null = den celého salonu
+    cal: { open: false, loading: false, data: null }, // měsíční kalendář pro skok na jiný den
+    picked: false, // zákaznice už ťukla na volný čas
+    pickedWhen: '', // „út 24. 11. v 10:00“
+    pan: { left: false, right: false },
+
     init() {
         const selected = config.selected ?? {};
         const known = (id) => this.staff.some((s) => s.id === id);
 
         // Jediná kadeřnice je vybraná rovnou, jinak předvýběr nebo „Kdokoliv“.
         this.staffId = this.staff.length === 1 ? this.staff[0].id : known(selected.staffId) ? selected.staffId : null;
-        this.serviceIds = (selected.serviceIds ?? []).filter((id) => this.visibleServices.some((s) => s.id === id));
         this.date = selected.date ?? null;
         this.time = selected.time ?? null;
+
+        if (this.boardOn) {
+            // V rozvrhu platí výběr jen celý (kadeřnice, den i čas) – typicky návrat po chybě ve formuláři.
+            this.picked = this.staffId !== null && this.date !== null && this.time !== null;
+
+            if (!this.picked) {
+                this.staffId = null;
+                this.date = null;
+                this.time = null;
+            }
+        }
+
+        this.serviceIds = (selected.serviceIds ?? []).filter((id) => this.visibleServices.some((s) => s.id === id));
         this.wantedDate = this.date;
         this.wantedTime = this.time;
 
-        if (this.hasSelection) {
+        if (this.boardOn) {
+            // Rozvrh začíná vždy celým salonem; jen po návratu z chyby týdnem vybrané kadeřnice.
+            this.boardStaffId = this.picked ? this.staffId : null;
+            this.loadBoard(this.date);
+            window.addEventListener('resize', () => this.updatePan());
+        }
+
+        if (this.hasSelection && (!this.boardOn || this.picked)) {
             this.load(this.date, true);
         }
+    },
+
+    /** Řádky rozvrhu po půl hodině. */
+    get boardRows() {
+        const rows = [];
+
+        for (let minute = this.board?.from ?? 0; minute < (this.board?.to ?? 0); minute += 30) {
+            rows.push({ minute, label: clock(minute).padStart(5, '0'), half: minute % 60 !== 0 });
+        }
+
+        return rows;
+    },
+
+    /** Sloupce rozvrhu: den celého salonu = lidé, týden jedné kadeřnice = dny. */
+    get boardColumns() {
+        return this.board?.columns ?? [];
+    },
+
+    /** Nadpis nad rozvrhem: den, nebo jméno kadeřnice, jejíž týden je vidět. */
+    get boardTitle() {
+        if (!this.board) {
+            return 'Rozvrh';
+        }
+
+        return this.board.mode === 'week' ? (this.staff.find((s) => s.id === this.board.staffId)?.name ?? '') : this.board.label;
+    },
+
+    /** Obsazené půlhodiny sloupce spojené do souvislých bloků. */
+    blocks(column) {
+        const blocks = [];
+
+        for (const minute of column.taken) {
+            const last = blocks[blocks.length - 1];
+
+            if (last && last.to === minute) {
+                last.to = minute + 30;
+            } else {
+                blocks.push({ from: minute, to: minute + 30 });
+            }
+        }
+
+        return blocks;
+    },
+
+    /** Vybraný čas zakreslený do rozvrhu (dokud není služba, jen půlhodina od ťuknutého času). */
+    get mine() {
+        if (!this.boardOn || !this.picked || !this.board || this.staffId === null) {
+            return null;
+        }
+
+        const column = this.boardColumns.find((c) => c.staffId === this.staffId && c.date === this.wantedDate);
+        const time = this.time ?? (this.serviceIds.length ? null : this.wantedTime);
+
+        if (!column || !time) {
+            return null;
+        }
+
+        const [hours, minutes] = time.split(':').map(Number);
+        const from = hours * 60 + minutes;
+        const length = this.summary?.minutes ?? 30;
+
+        return { key: column.key, from, to: from + length, label: `${time} – ${clock(from + length)}` };
+    },
+
+    clock,
+
+    /** Svislá poloha a výška v rozvrhu (řádek = půl hodiny = --cal-half). */
+    boardBox(from, to) {
+        const top = Math.max(from, this.board.from);
+        const bottom = Math.min(to, this.board.to);
+
+        return `top: calc(var(--cal-half) * ${(top - this.board.from) / 30}); height: calc(var(--cal-half) * ${Math.max(0, bottom - top) / 30})`;
+    },
+
+    /** Ťuknutí na kadeřnici: její týden od dne, který je právě vidět. `null` = zpět na celý salon. */
+    showStaff(id) {
+        this.boardStaffId = id;
+        this.loadBoard(this.board?.date ?? null);
+    },
+
+    async loadBoard(date = null) {
+        const requestNo = ++this.boardRequestNo;
+        const url = new URL(config.boardUrl, window.location.href);
+
+        if (date) {
+            url.searchParams.set('den', date);
+        }
+
+        if (this.boardStaffId !== null) {
+            url.searchParams.set('kadernice', this.boardStaffId);
+        }
+
+        this.boardLoading = true;
+        this.boardFailed = false;
+
+        try {
+            const response = await fetch(url, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (requestNo === this.boardRequestNo) {
+                const reshaped = this.board?.mode !== data.mode;
+
+                this.board = data;
+                this.$nextTick(() => {
+                    // Jiný pohled (salon ↔ týden) začíná od prvního sloupce.
+                    if (reshaped && this.$refs.boardScroll) {
+                        this.$refs.boardScroll.scrollLeft = 0;
+                    }
+
+                    this.updatePan();
+                });
+            }
+        } catch (error) {
+            if (requestNo === this.boardRequestNo) {
+                this.boardFailed = true;
+            }
+        } finally {
+            if (requestNo === this.boardRequestNo) {
+                this.boardLoading = false;
+            }
+        }
+    },
+
+    /** Ťuknutí na volný čas v rozvrhu: kadeřnice, den i čas najednou; služba se vybírá potom. */
+    pickCell(column, minute) {
+        this.picked = true;
+        this.staffId = column.staffId;
+        this.serviceIds = this.serviceIds.filter((id) => this.visibleServices.some((s) => s.id === id));
+        this.wantedDate = column.date;
+        this.wantedTime = clock(minute);
+        this.pickedWhen = `${column.short} v ${this.wantedTime}`;
+        this.date = column.date;
+        this.time = null;
+
+        if (this.hasSelection) {
+            this.load(this.wantedDate);
+        } else {
+            this.requestNo++;
+            this.days = [];
+            this.summary = null;
+            this.loaded = false;
+            this.loading = false;
+        }
+
+        this.$nextTick(() => this.$refs.choice?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    },
+
+    /** Výběr času z nabídky pod službami. V rozvrhu si ho průvodce pamatuje i po změně služeb. */
+    pickTime(slot) {
+        this.time = slot;
+
+        if (this.boardOn) {
+            this.wantedTime = slot;
+            this.pickedWhen = this.selectedDay ? `${this.selectedDay.label} v ${slot}` : this.pickedWhen;
+        }
+    },
+
+    /** „Jiný den“: rozbalí měsíční kalendář s měsícem, který je právě v rozvrhu vidět. */
+    toggleCal() {
+        this.cal.open = !this.cal.open;
+
+        if (this.cal.open) {
+            this.loadMonth(this.board?.date.slice(0, 7) ?? null);
+        }
+    },
+
+    async loadMonth(month = null) {
+        const url = new URL(config.monthUrl, window.location.href);
+
+        if (month) {
+            url.searchParams.set('mesic', month);
+        }
+
+        if (this.boardStaffId !== null) {
+            url.searchParams.set('kadernice', this.boardStaffId);
+        }
+
+        this.cal.loading = true;
+
+        try {
+            const response = await fetch(url, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            });
+
+            if (response.ok) {
+                this.cal.data = await response.json();
+            }
+        } catch (error) {
+            // Kalendář zůstane, jak byl; den jde pořád změnit šipkami.
+        } finally {
+            this.cal.loading = false;
+        }
+    },
+
+    /** Den, který je v rozvrhu právě vidět (v týdnu všech sedm) – v kalendáři je zvýrazněný. */
+    isShown(date) {
+        return this.boardColumns.some((column) => column.date === date);
+    },
+
+    jumpTo(date) {
+        this.cal.open = false;
+        this.loadBoard(date);
+    },
+
+    /** Posun rozvrhu do strany šipkami (na telefonu stačí prst); záhlaví se jmény jede s ním. */
+    updatePan() {
+        const scroll = this.$refs.boardScroll;
+
+        if (!scroll) {
+            return;
+        }
+
+        if (this.$refs.boardHead) {
+            this.$refs.boardHead.scrollLeft = scroll.scrollLeft;
+        }
+
+        this.pan = {
+            left: scroll.scrollLeft > 2,
+            right: scroll.scrollLeft + scroll.clientWidth < scroll.scrollWidth - 2,
+        };
+    },
+
+    panBy(direction) {
+        const scroll = this.$refs.boardScroll;
+
+        scroll?.scrollBy({ left: direction * Math.max(200, scroll.clientWidth * 0.6), behavior: 'smooth' });
     },
 
     /** Je z čeho počítat termíny? */
@@ -229,6 +504,21 @@ export default (config) => ({
             this.next = data.next;
             this.summary = data.summary;
             this.loaded = true;
+
+            // Rozvrh: den i čas určilo ťuknutí. Když se vybraná služba od toho času nevejde,
+            // zůstává den a zákaznice si vybere jiný začátek – průvodce sám jinam neskáče.
+            if (this.boardOn) {
+                const day = this.days.find((d) => d.date === this.wantedDate) ?? null;
+
+                this.date = day ? day.date : null;
+                this.time = day && day.times.includes(this.wantedTime) ? this.wantedTime : null;
+
+                if (day && this.wantedTime) {
+                    this.pickedWhen = `${day.label} v ${this.wantedTime}`;
+                }
+
+                return;
+            }
 
             const stillValid = keepSelection && this.selectedDay && this.selectedDay.times.includes(this.time);
 

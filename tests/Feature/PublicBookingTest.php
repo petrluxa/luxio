@@ -152,14 +152,68 @@ test('robot, který vyplní skryté pole, nic nevytvoří', function () {
     expect(Customer::count())->toBe(0);
 });
 
-test('stálá zákaznice s cookie jde z veřejného odkazu rovnou do svého účtu', function () {
-    $token = tokenFor(customer($this->salon));
+test('odkaz salonu je hlavní stránka i pro zákaznici, kterou si prohlížeč pamatuje', function () {
+    $jana = customer($this->salon, ['name' => 'Jana Nováková']);
+    $token = tokenFor($jana);
+
+    // Žádné přesměrování do účtu: stejná stránka, jen bez jména a telefonu, a rezervace jde do jejího účtu.
+    $this->withCookie(CustomerCookie::NAME, $token)
+        ->get('/s/'.$this->salon->slug)
+        ->assertOk()
+        ->assertSee('Nová rezervace')
+        ->assertSee('Rezervujete jako')
+        ->assertSee('Jana Nováková')
+        ->assertSee('action="'.url(k($token, '/rezervace')).'"', false)
+        ->assertDontSee('Vaše údaje')
+        ->assertDontSee('name="phone"', false)
+        ->assertDontSee('pub-other', false)          // odkaz na účet je nahoře, pod rozvrhem se neopakuje
+        ->assertViewHas('wizard', fn (array $wizard) => str_ends_with($wizard['slotsUrl'], k($token, '/rezervace/terminy')));
+
+    $this->withCookie(CustomerCookie::NAME, $token)
+        ->post(k($token, '/rezervace'), ['services' => [$this->cut->id], 'date' => TEST_DAY, 'time' => '10:00'])
+        ->assertRedirect();
+
+    expect($jana->bookings()->count())->toBe(1);
+
+    // Úvodní adresa aplikace vede zákaznici dál do jejího účtu.
+    $this->withCookie(CustomerCookie::NAME, $token)->get('/')->assertRedirect(k($token));
+});
+
+test('odhlášení na stránce salonu: prohlížeč zákaznici zapomene, účet a termíny zůstanou', function () {
+    $jana = customer($this->salon, ['name' => 'Jana Nováková']);
+    $token = tokenFor($jana);
+
+    $this->withCookie(CustomerCookie::NAME, $token)->get('/s/'.$this->salon->slug)->assertSee('Odhlásit')->assertSee('/odhlasit', false);
+
+    $this->withCookie(CustomerCookie::NAME, $token)
+        ->post("/s/{$this->salon->slug}/odhlasit")
+        ->assertRedirect('/s/'.$this->salon->slug)
+        ->assertCookieExpired(CustomerCookie::NAME);
+
+    // Bez cookie je to stránka pro kohokoliv nového; osobní odkaz funguje dál.
+    // (Zkušební prohlížeč si cookie z předchozích požadavků drží, proto ji tady vymažeme ručně.)
+    $this->withCookie(CustomerCookie::NAME, '')->get('/s/'.$this->salon->slug)->assertOk()->assertSee('Vaše údaje')->assertDontSee('Rezervujete jako')->assertDontSee('Odhlásit');
+    $this->get(k($token))->assertOk();
+    expect($jana->fresh())->not->toBeNull();
+});
+
+test('zablokovaná zákaznice a odkaz vázaný na jednu kadeřnici jdou z odkazu salonu do účtu', function () {
+    $blocked = tokenFor(customer($this->salon, ['is_blocked' => true]));
+    $scoped = tokenFor(customer($this->salon), $this->staff->id);
+
+    $this->withCookie(CustomerCookie::NAME, $blocked)->get('/s/'.$this->salon->slug)->assertRedirect(k($blocked, '/rezervace'));
+    $this->withCookie(CustomerCookie::NAME, $scoped)->get('/s/'.$this->salon->slug)->assertRedirect(k($scoped, '/rezervace'));
+});
+
+test('zákaznice jiného salonu vidí odkaz salonu jako kdokoliv nový', function () {
+    [$other] = salonWithStaff();
+    $token = tokenFor(customer($other));
 
     $this->withCookie(CustomerCookie::NAME, $token)
         ->get('/s/'.$this->salon->slug)
-        ->assertRedirect(k($token, '/rezervace'));
-
-    $this->withCookie(CustomerCookie::NAME, $token)->get('/')->assertRedirect(k($token));
+        ->assertOk()
+        ->assertSee('Vaše údaje')
+        ->assertDontSee('Rezervujete jako');
 });
 
 describe('ztracený odkaz', function () {

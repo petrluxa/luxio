@@ -32,19 +32,34 @@ class PublicBookingController extends Controller
 
     public function create(Request $request, Salon $salon): View|RedirectResponse
     {
-        // Stálá zákaznice tohoto salonu jde rovnou do svého účtu.
-        $known = CustomerCookie::customer($request);
+        // Odkaz salonu je hlavní stránka – rozvrh celého salonu, stejný pro každého. Zákaznici, kterou
+        // si prohlížeč pamatuje, se jen neptá na jméno a telefon a rezervace jde rovnou do jejího účtu.
+        $token = CustomerCookie::token($request);
+        $access = $token ? CustomerAccessToken::findValid($token) : null;
+        $known = $access && $access->customer->salon_id === $salon->id ? $access->customer : null;
 
-        if ($known && $known->salon_id === $salon->id) {
-            return redirect()->route('customer.booking.create', ['token' => $request->cookie(CustomerCookie::NAME)]);
+        // Zablokovaná zákaznice a odkaz vázaný na jednu kadeřnici mají svá omezení – ta hlídá stránka účtu.
+        if ($known && ($known->is_blocked || $access->scope_staff_id)) {
+            return redirect()->route('customer.booking.create', ['token' => $token]);
         }
+
+        $own = $known ? ['token' => $token] : null;
+        $options = $this->wizard->options($salon);
+
+        // Salon s víc lidmi začíná rozvrhem celého salonu (potřebuje šířku okna, ne úzký sloupec).
+        $board = count($options['staff']) > 1;
 
         return view('public.create', [
             'salon' => $salon,
             'appTitle' => $salon->name,
             'formStamp' => $this->guard->stamp(),
-            'wizard' => $this->wizard->options($salon) + [
-                'slotsUrl' => route('salon.slots', $salon),
+            'wide' => $board,
+            'known' => $known,
+            'own' => $own,
+            'wizard' => $options + [
+                'slotsUrl' => $own ? route('customer.booking.slots', $own) : route('salon.slots', $salon),
+                'boardUrl' => $board ? ($own ? route('customer.booking.board', $own) : route('salon.board', $salon)) : null,
+                'monthUrl' => $own ? route('customer.booking.board.month', $own) : route('salon.board.month', $salon),
                 'replaces' => null,
                 'selected' => [
                     'staffId' => $request->old('staff') ? (int) $request->old('staff') : null,
@@ -64,6 +79,18 @@ class PublicBookingController extends Controller
             staffId: $request->integer('staff') ?: null,
             from: $request->query('from'),
         ));
+    }
+
+    /** Rozvrh: den celého salonu, nebo týden jedné kadeřnice (?kadernice=) – kdo má kdy volno, bez jmen zákaznic. */
+    public function board(Request $request, Salon $salon): JsonResponse
+    {
+        return response()->json($this->wizard->board($salon, $request->query('den'), null, $request->integer('kadernice') ?: null));
+    }
+
+    /** Měsíc pro kalendář „Jiný den“: na které dny jde skočit a kdy salon (kadeřnice) pracuje. */
+    public function month(Request $request, Salon $salon): JsonResponse
+    {
+        return response()->json($this->wizard->month($salon, $request->query('mesic'), null, $request->integer('kadernice') ?: null));
     }
 
     public function store(Request $request, Salon $salon): RedirectResponse
@@ -127,6 +154,18 @@ class PublicBookingController extends Controller
         return redirect()
             ->route('customer.onboarding', ['token' => $token, 'rezervace' => $booking->id])
             ->withCookie(CustomerCookie::make($token));
+    }
+
+    /**
+     * Odhlášení na stránce salonu: prohlížeč zákaznici zapomene a stránka se ukáže jako komukoliv novému.
+     * Účet ani termíny se nemění – zákaznice se k nim vrátí svým osobním odkazem.
+     */
+    public function forget(Salon $salon): RedirectResponse
+    {
+        return redirect()
+            ->route('salon.show', $salon)
+            ->with('status', 'Jste odhlášeni. Ke svým termínům se kdykoliv vrátíte přes svůj osobní odkaz.')
+            ->withCookie(CustomerCookie::forget());
     }
 
     public function sent(Salon $salon): View

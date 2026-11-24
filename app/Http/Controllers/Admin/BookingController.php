@@ -216,8 +216,13 @@ class BookingController extends AdminController
         $data = $request->validate([
             'customer_id' => ['nullable', 'integer'],
             'customer_name' => ['required_without:customer_id', 'nullable', 'string', 'min:2', 'max:100'],
-            'customer_phone' => ['nullable', 'string'],
-        ], ['customer_name.required_without' => 'Vyberte zákaznici, nebo zadejte jméno nové.']);
+            // Nová zákaznice bez telefonu se nedá dohledat ani jí nejde zavolat – telefon je povinný.
+            // (Nesmyslné číslo se výše změnilo na prázdné, takže neprojde ani to.)
+            'customer_phone' => ['required_without:customer_id', 'nullable', 'string'],
+        ], [
+            'customer_name.required_without' => 'Vyberte zákaznici, nebo zadejte jméno nové.',
+            'customer_phone.required_without' => 'Zadejte telefon nové zákaznice – 9 číslic.',
+        ]);
 
         // „Jiný čas“ v průvodci: zapsat i na obsazený čas nebo mimo pracovní dobu.
         $force = $request->boolean('force') && $selection->staff !== null;

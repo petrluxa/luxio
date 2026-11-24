@@ -5,7 +5,7 @@
  *   a povolení se smí vyžádat pouze po ťuknutí na tlačítko.
  * - Android / Chrome: instalaci nabídne událost `beforeinstallprompt`.
  *
- * config = { vapidKey, subscribeUrl }
+ * config = { vapidKey, subscribeUrl, testUrl }
  */
 import { registerWorker } from './worker';
 
@@ -14,6 +14,24 @@ const toUint8Array = (base64) => {
 
     return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
 };
+
+/** Patří odběr zařízení ke klíči tohoto serveru? (Když prohlížeč klíč neprozradí, bereme, že ano.) */
+const sameKey = (subscription, key) => {
+    const current = subscription.options?.applicationServerKey;
+
+    if (!current) {
+        return true;
+    }
+
+    const bytes = new Uint8Array(current);
+
+    return bytes.length === key.length && bytes.every((byte, index) => byte === key[index]);
+};
+
+/** Chyba telefonu nebo serveru jednou větou – pro člověka, který ji přepošle dál. */
+const describe = (error) => [error?.name, error?.message].filter(Boolean).join(': ');
+
+const EXPIRED_PAGE = 'Stránka je otevřená příliš dlouho. Zavřete ji, otevřete znovu a zkuste to ještě jednou.';
 
 export default (config) => ({
     platform: 'desktop', // ios | android | desktop
@@ -26,6 +44,9 @@ export default (config) => ({
     busy: false,
     error: '',
     stillDenied: false, // uživatel říká, že upozornění v telefonu povolil, ale telefon je dál hlásí jako zakázaná
+    detail: '', // doslovná chyba od telefonu nebo serveru (malým písmem pod hláškou)
+    testing: false,
+    testResult: '', // '' | 'sent' | 'failed' – výsledek zkušebního upozornění
     installEvent: null,
 
     async init() {
@@ -82,8 +103,9 @@ export default (config) => ({
             this.subscribed = subscription !== null && this.permission === 'granted';
 
             // Odběr se může časem změnit – při každé návštěvě ho serveru připomeneme.
+            // Odběr založený pro jiný klíč serveru by nikdy nic nedoručil, proto se založí znovu.
             if (this.subscribed) {
-                await this.save(subscription);
+                await (sameKey(subscription, toUint8Array(config.vapidKey)) ? this.save(subscription) : this.subscribe(true));
             }
         } catch (error) {
             // Bez service workeru zůstane nabídka zapnutí, chyba se ukáže až při pokusu.
@@ -98,7 +120,33 @@ export default (config) => ({
     async registration() {
         await registerWorker();
 
-        return navigator.serviceWorker.ready;
+        // Bez časového limitu by tlačítko při potíži zůstalo navždy šedé.
+        return Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Část aplikace pro upozornění se nespustila.')), 15000)),
+        ]);
+    },
+
+    /**
+     * Založí odběr zařízení a uloží ho na server. `fresh` zahodí ten dosavadní
+     * (přestal platit nebo patří k jinému klíči serveru).
+     */
+    async subscribe(fresh = false) {
+        const registration = await this.registration();
+        const key = toUint8Array(config.vapidKey);
+        let subscription = await registration.pushManager.getSubscription();
+
+        if (subscription && (fresh || !sameKey(subscription, key))) {
+            await this.request('DELETE', { endpoint: subscription.endpoint }).catch(() => {});
+            await subscription.unsubscribe();
+            subscription = null;
+        }
+
+        subscription ??= await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+
+        await this.save(subscription);
+
+        return subscription;
     },
 
     async install() {
@@ -115,6 +163,8 @@ export default (config) => ({
     /** Musí se volat přímo z ťuknutí na tlačítko (požadavek iOS). */
     async enable() {
         this.error = '';
+        this.detail = '';
+        this.testResult = '';
         this.busy = true;
 
         try {
@@ -131,25 +181,59 @@ export default (config) => ({
 
             this.stillDenied = false;
 
-            const registration = await this.registration();
-            const subscription =
-                (await registration.pushManager.getSubscription()) ??
-                (await registration.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: toUint8Array(config.vapidKey),
-                }));
-
-            await this.save(subscription);
+            await this.subscribe();
             this.subscribed = true;
         } catch (error) {
-            this.error = 'Upozornění se nepodařilo zapnout. Zkuste to prosím znovu.';
+            this.error = error.expiredPage ? EXPIRED_PAGE : 'Upozornění se nepodařilo zapnout. Zkuste to prosím znovu.';
+            this.detail = error.expiredPage ? '' : describe(error);
         } finally {
             this.busy = false;
         }
     },
 
+    /**
+     * Pošle na toto zařízení zkušební upozornění. Když server hlásí, že odběr přestal platit
+     * (nebo ho služba upozornění odmítla), založí se znovu a zkusí se to ještě jednou.
+     */
+    async sendTest(retry = true) {
+        this.error = '';
+        this.detail = '';
+        this.testResult = '';
+        this.testing = true;
+
+        try {
+            const registration = await this.registration();
+            const subscription = (await registration.pushManager.getSubscription()) ?? (await this.subscribe());
+            const result = await this.request('POST', { endpoint: subscription.endpoint }, config.testUrl);
+
+            if (result.ok) {
+                this.testResult = 'sent';
+
+                return;
+            }
+
+            if (retry && (result.expired || [400, 401, 403].includes(result.status))) {
+                await this.subscribe(true);
+                await this.sendTest(false);
+
+                return;
+            }
+
+            this.testResult = 'failed';
+            this.detail = [result.status ? `kód ${result.status}` : '', result.reason || ''].filter(Boolean).join(' – ');
+        } catch (error) {
+            this.testResult = 'failed';
+            this.error = error.expiredPage ? EXPIRED_PAGE : '';
+            this.detail = error.expiredPage ? '' : describe(error);
+        } finally {
+            this.testing = false;
+        }
+    },
+
     async disable() {
         this.error = '';
+        this.detail = '';
+        this.testResult = '';
         this.busy = true;
 
         try {
@@ -170,13 +254,15 @@ export default (config) => ({
     },
 
     save(subscription) {
-        const encoding = (PushManager.supportedContentEncodings || ['aesgcm'])[0];
+        // Starší prohlížeč, který kódování neuvádí, umí to běžné (a Apple jiné nepřijímá).
+        const supported = PushManager.supportedContentEncodings || [];
+        const encoding = supported.includes('aes128gcm') || !supported.length ? 'aes128gcm' : supported[0];
 
         return this.request('POST', { ...subscription.toJSON(), contentEncoding: encoding });
     },
 
-    async request(method, body) {
-        const response = await fetch(config.subscribeUrl, {
+    async request(method, body, url = config.subscribeUrl) {
+        const response = await fetch(url, {
             method,
             credentials: 'same-origin',
             headers: {
@@ -188,7 +274,14 @@ export default (config) => ({
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+            const error = new Error(`Server odpověděl kódem ${response.status}.`);
+
+            // Vypršelo přihlášení nebo ochranný klíč stránky – pomůže ji otevřít znovu.
+            error.expiredPage = [401, 419].includes(response.status);
+
+            throw error;
         }
+
+        return response.json().catch(() => ({}));
     },
 });

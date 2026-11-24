@@ -1944,6 +1944,610 @@
         background: var(--danger);
         pointer-events: none;
     }
+
+    /* Rozvrh pro zákaznice: stejná mřížka a stejné barvy jako rozvrh v administraci (sloupec = kadeřnice
+       nebo den, řádek = půl hodiny), jen bez jmen. Volný čas je bílé pole k ťuknutí, obsazený čas plný
+       neonový blok zarovnaný na řádky, zavřeno ztlumené pozadí, vlastní výběr hnědý blok. */
+    .cal-frame.pub-board {
+        --cal-min: 96px; /* telefon: tři sloupce a kus čtvrtého – je vidět, že rozvrh pokračuje do strany */
+        --cal-half: 40px; /* prst potřebuje vyšší řádek než myš */
+        --top-h: 0px; /* stránka zákaznice nemá horní lištu – záhlaví se drží úplně nahoře */
+        margin-bottom: 8px;
+    }
+
+    @media (min-width: 768px) {
+        .cal-frame.pub-board {
+            --cal-min: 112px; /* jedenáct lidí se vejde do okna širokého 1400 px */
+        }
+    }
+
+    @media (min-width: 1024px) and (hover: hover) {
+        .cal-frame.pub-board {
+            --cal-half: 36px;
+        }
+    }
+
+    /* Panel nad rozvrhem: den se šipkami, skok na jiný den a pod tím výběr, čí rozvrh je vidět. */
+    .pub-top {
+        display: grid;
+        gap: 12px;
+        margin: 10px 0 12px;
+        padding: 14px;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: var(--card);
+    }
+
+    .pub-top .chip:not([aria-pressed='true']) {
+        background: var(--bg);
+    }
+
+    .pub-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px 16px;
+    }
+
+    .pub-when {
+        display: flex;
+        flex: 1 1 auto;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .pub-title {
+        flex: 1 1 auto;
+        min-width: 0;
+        line-height: 1.2;
+        text-align: center;
+    }
+
+    .pub-title h2 {
+        overflow: hidden;
+        font-size: 19px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .pub-title h2::first-letter {
+        text-transform: uppercase;
+    }
+
+    .pub-title span {
+        display: block;
+        color: var(--muted);
+        font-size: 13px;
+    }
+
+    @media (min-width: 768px) {
+        .pub-when {
+            flex: 0 1 auto;
+        }
+
+        /* Stejná šířka pro krátký i dlouhý den, ať šipky při listování neskáčou. */
+        .pub-title {
+            flex: none;
+            width: 270px;
+        }
+
+        .pub-title h2 {
+            font-size: 22px;
+        }
+    }
+
+    .pub-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .pub-step {
+        flex: none;
+        width: 44px;
+        padding: 0;
+        font-size: 20px;
+    }
+
+    /* „Jiný den“: tlačítko rozbalí vlastní měsíční kalendář pod řádkem tlačítek. Na počítači visí
+       vpravo pod nimi, na telefonu je přes celou šířku panelu (řádek tlačítek tam zabírá celý řádek). */
+    .pub-nav {
+        position: relative;
+    }
+
+    @media (max-width: 767px) {
+        .pub-nav {
+            flex: 1 1 100%;
+        }
+    }
+
+    .pub-date {
+        gap: 8px;
+    }
+
+    .pub-date[aria-expanded='true'] {
+        border-color: var(--link);
+        background: var(--card);
+    }
+
+    .pub-cal {
+        position: absolute;
+        top: calc(100% + 10px);
+        right: 0;
+        left: 0;
+        z-index: 30;
+        padding: 14px;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: var(--card);
+        box-shadow:
+            0 2px 6px color-mix(in srgb, #000 8%, transparent),
+            0 22px 48px color-mix(in srgb, #000 22%, transparent);
+    }
+
+    @media (min-width: 768px) {
+        .pub-cal {
+            left: auto;
+            width: 336px;
+        }
+    }
+
+    .pub-cal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    .pub-cal-head b {
+        font-size: 17px;
+        font-weight: 700;
+    }
+
+    .pub-cal-arrow {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .pub-cal-arrow:disabled {
+        opacity: 0.35;
+        cursor: default;
+    }
+
+    @media (hover: hover) {
+        .pub-cal-arrow:not(:disabled):hover {
+            border-color: var(--link);
+        }
+    }
+
+    .pub-cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 4px;
+        transition: opacity 0.15s;
+    }
+
+    .pub-cal-grid.is-loading {
+        opacity: 0.5;
+    }
+
+    .pub-cal-dow {
+        padding: 2px 0 4px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-align: center;
+        text-transform: uppercase;
+    }
+
+    .pub-cal-day {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 40px;
+        border: 0;
+        border-radius: 11px;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 15px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        cursor: pointer;
+    }
+
+    @media (hover: hover) {
+        .pub-cal-day:not(:disabled):hover {
+            background: var(--selected);
+            box-shadow: inset 0 0 0 2px var(--link);
+        }
+    }
+
+    /* Den z vedlejšího měsíce a den, na který skočit nejde (minulost, moc daleko). */
+    .pub-cal-day.is-out {
+        font-weight: 400;
+    }
+
+    .pub-cal-day:disabled {
+        background: none;
+        color: var(--muted);
+        font-weight: 400;
+        opacity: 0.4;
+        cursor: default;
+    }
+
+    /* Den, kdy se nepracuje: bez podkladu, jen číslo. */
+    .pub-cal-day.is-closed:not(:disabled) {
+        background: none;
+        color: var(--muted);
+        font-weight: 400;
+    }
+
+    .pub-cal-day.is-today {
+        box-shadow: inset 0 0 0 2px var(--link);
+    }
+
+    /* Dny, které jsou v rozvrhu právě vidět: týden světle, první (nebo jediný) den neonově. */
+    .pub-cal-day.is-on:not(:disabled) {
+        background: var(--selected);
+        color: var(--text);
+        font-weight: 700;
+    }
+
+    .pub-cal-day.is-first:not(:disabled) {
+        background: var(--primary);
+        color: var(--on-primary);
+        font-weight: 700;
+    }
+
+    .pub-cal-note {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+    }
+
+    .pub-cal-note i {
+        flex: none;
+        width: 14px;
+        height: 14px;
+        border: 1px dashed var(--border);
+        border-radius: 5px;
+    }
+
+    /* Výběr kadeřnice: na telefonu jeden řádek, který se posouvá do strany, na počítači se zalomí. */
+    .pub-staff {
+        display: flex;
+        gap: 8px;
+        margin: 0 -14px;
+        padding: 2px 14px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .pub-staff::-webkit-scrollbar {
+        display: none;
+    }
+
+    .pub-staff .chip {
+        flex: none;
+        height: 38px;
+        padding: 0 13px;
+        font-size: 14px;
+    }
+
+    @media (min-width: 768px) {
+        .pub-staff {
+            flex-wrap: wrap;
+            margin: 0;
+            padding: 0;
+            overflow: visible;
+        }
+    }
+
+    .pub-info {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px 20px;
+        margin-bottom: 12px;
+    }
+
+    .pub-hint {
+        font-size: 14px;
+    }
+
+    .pub-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        color: var(--muted);
+        font-size: 13px;
+    }
+
+    .pub-legend i {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        margin-right: 6px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        vertical-align: -2px;
+    }
+
+    .pub-legend .is-free {
+        background: var(--card);
+    }
+
+    .pub-legend .is-busy {
+        border-color: var(--primary);
+        background: var(--primary);
+    }
+
+    .pub-legend .is-closed {
+        background: var(--cal-closed);
+    }
+
+    .pub-legend .is-mine {
+        border-color: var(--banner);
+        background: var(--banner);
+    }
+
+    /* Řádek „Rezervujete jako …“ pro zákaznici, kterou si prohlížeč pamatuje. */
+    .pub-known {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 16px;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 14px;
+    }
+
+    .pub-known button {
+        min-height: 32px;
+        padding: 0 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--card);
+        color: var(--text);
+        font: inherit;
+        cursor: pointer;
+    }
+
+    @media (hover: hover) {
+        .pub-known button:hover {
+            border-color: var(--link);
+        }
+    }
+
+    .pub-known b {
+        color: var(--text);
+        font-weight: 600;
+    }
+
+    .pub-known a {
+        color: var(--link);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+    }
+
+    .pub-other {
+        margin-top: 14px;
+        font-size: 14px;
+        text-align: center;
+    }
+
+    .pub-other a {
+        color: var(--link);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+    }
+
+    .pub-grid {
+        transition: opacity 0.15s;
+    }
+
+    .pub-grid.is-loading {
+        opacity: 0.55;
+    }
+
+    /* Záhlaví sloupce je tlačítko: ťuknutí na jméno ukáže týden toho člověka. */
+    .pub-board .cal-staff {
+        justify-content: center;
+        width: 100%;
+        padding: 6px 4px;
+        border-top: 0;
+        border-right: 0;
+        border-bottom: 0;
+        font: inherit;
+        text-align: center;
+        cursor: pointer;
+    }
+
+    .pub-board .cal-staff:disabled {
+        cursor: default;
+    }
+
+    @media (hover: hover) {
+        .pub-board .cal-staff:not(:disabled):hover {
+            background: color-mix(in srgb, #fff 14%, var(--banner));
+        }
+    }
+
+    .pub-board .cal-staff.is-today {
+        background: var(--primary);
+        color: var(--on-primary);
+    }
+
+    /* Linky po půl hodině vedou i přes zavřené části sloupce, ať jde číst řádek od osy času. */
+    .pub-col {
+        background-image: linear-gradient(to bottom, color-mix(in srgb, var(--border) 70%, transparent) 1px, transparent 1px);
+        background-size: 100% var(--cal-half);
+    }
+
+    .pub-slot {
+        position: absolute;
+        right: 0;
+        left: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-top: 1px solid var(--border);
+        background: var(--card);
+        color: var(--muted);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        cursor: pointer;
+    }
+
+    .pub-slot:focus-visible {
+        z-index: 4;
+        outline: 2px solid var(--link);
+        outline-offset: -2px;
+    }
+
+    @media (hover: hover) {
+        .pub-slot:hover {
+            background: var(--selected);
+            box-shadow: inset 0 0 0 2px var(--link);
+            color: var(--text);
+            font-weight: 700;
+        }
+    }
+
+    .pub-slot:active {
+        background: var(--selected);
+        color: var(--text);
+    }
+
+    /* Obsazeno a vlastní výběr: plný blok od kraje do kraje sloupce a od linky k lince. */
+    .pub-busy,
+    .pub-mine {
+        position: absolute;
+        right: 0;
+        left: 0;
+        overflow: hidden;
+        padding: 5px 8px;
+        border-radius: 7px;
+        font-size: 11px;
+        line-height: 1.3;
+    }
+
+    .pub-busy b,
+    .pub-mine b {
+        display: block;
+        overflow: hidden;
+        font-size: 12px;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .pub-busy span,
+    .pub-mine span {
+        display: block;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        opacity: 0.75;
+    }
+
+    /* Půlhodinový blok: jen jeden řádek na středu. */
+    .pub-busy.is-short,
+    .pub-mine.is-short {
+        display: flex;
+        align-items: center;
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+
+    .pub-busy.is-short span,
+    .pub-mine.is-short b {
+        display: none;
+    }
+
+    .pub-mine.is-short span {
+        font-size: 12px;
+        font-weight: 600;
+        opacity: 1;
+    }
+
+    .pub-busy {
+        z-index: 1;
+        background: var(--primary);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-primary) 14%, transparent);
+        color: var(--on-primary);
+    }
+
+    .pub-mine {
+        z-index: 3;
+        background: var(--banner);
+        box-shadow: 0 2px 10px color-mix(in srgb, #000 22%, transparent);
+        color: var(--banner-text);
+        pointer-events: none;
+    }
+
+    /* Výzva v administraci: na tomto zařízení nejsou zapnutá upozornění. */
+    .push-nudge {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        margin-bottom: 14px;
+        padding: 10px 14px;
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--primary);
+        border-radius: 14px;
+        background: var(--card);
+    }
+
+    .push-nudge svg {
+        flex: none;
+        color: var(--link);
+    }
+
+    .push-nudge p {
+        flex: 1 1 260px;
+        min-width: 0;
+        font-size: 14px;
+        line-height: 1.35;
+    }
+
+    .push-nudge b {
+        font-weight: 600;
+    }
+
+    /* Pod rozvrhem pokračuje rezervace úzkým sloupcem jako na ostatních stránkách zákaznice. */
+    .pub-rest {
+        width: 100%;
+        max-width: 448px;
+        margin: 0 auto;
+    }
+
+    .pub-choice {
+        scroll-margin-top: 70px;
+    }
 }
 
 @layer components {

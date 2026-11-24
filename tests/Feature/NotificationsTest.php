@@ -215,6 +215,44 @@ describe('bez push odběru a záznam upozornění', function () {
             ->error->toBeNull();
     });
 
+    test('upozornění, které služba všech zařízení odmítla, se nezapíše jako odeslané', function () {
+        $booking = $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->petra);
+        $report = fn (int $status, bool $ok) => new \Minishlink\WebPush\MessageSentReport(
+            new \GuzzleHttp\Psr7\Request('POST', 'https://push.example.com/tajna-adresa-zarizeni'),
+            new \GuzzleHttp\Psr7\Response($status),
+            $ok,
+            $ok ? 'OK' : 'POST https://push.example.com/tajna-adresa-zarizeni resulted in a `403 Forbidden`',
+        );
+        $sent = fn (array $reports) => event(new NotificationSent(
+            $this->petra, new BookingNotification($booking, BookingNotice::NewBooking), WebPushChannel::class, $reports,
+        ));
+
+        // Jedno zařízení odmítnuto, druhé přijato → kadeřnice se to dozví, bere se jako odesláno.
+        $sent([$report(403, false), $report(201, true)]);
+
+        expect(NotificationLog::sole())->sent_at->not->toBeNull()->error->toBeNull();
+
+        NotificationLog::query()->delete();
+        $sent([$report(403, false)]);
+
+        expect(NotificationLog::sole())
+            ->sent_at->toBeNull()
+            ->error->toContain('kód 403')
+            ->error->not->toContain('tajna-adresa-zarizeni');
+    });
+
+    test('administrace upozorní, že na zařízení nejsou zapnutá upozornění – kromě stránky, kde se zapínají', function () {
+        $this->actingAs($this->petra);
+
+        $this->get('/admin/kalendar')->assertOk()
+            ->assertSee('Na tomto zařízení nemáte zapnutá upozornění')
+            ->assertSee('/admin/ucet#upozorneni', false);
+
+        $this->get('/admin/ucet')->assertOk()
+            ->assertDontSee('Na tomto zařízení nemáte zapnutá upozornění')
+            ->assertSee('id="upozorneni"', false);
+    });
+
     test('nepovedené odeslání se zapíše s chybou', function () {
         $booking = $this->manager->create($this->jana, [$this->cut], at('10:00'), $this->petra);
 
